@@ -233,8 +233,8 @@ DevWebUI runs entirely on your machine: a single daemon on your localhost, open 
 **Is DevWebUI free?**
 Yes. DevWebUI is open source under the MIT License, and core functionality, starting, stopping,
 and monitoring your dev servers from the GUI or over MCP, needs no account and no cloud. The only
-optional extras are cross-machine settings sync and an anonymous install ping, both off unless you
-enable them.
+optional extras are cross-machine settings sync, off unless you enable it, and an anonymous install
+ping for update checks, on unless you set `DEVWEBUI_NO_PING=1`.
 
 **Does it work offline?**
 Yes. The daemon and GUI run entirely on your local machine, and starting, stopping, and monitoring
