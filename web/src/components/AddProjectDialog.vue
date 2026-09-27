@@ -388,7 +388,10 @@ function promptForLocation(
 
 <template>
   <Dialog :open="open" @update:open="(v: boolean) => { if (!busy) open = v }">
-    <DialogContent class="max-h-[90vh] gap-0 overflow-y-auto overflow-x-hidden sm:max-w-[540px]" :aria-busy="busy">
+    <DialogContent class="max-h-[90vh] overflow-y-auto overflow-x-hidden sm:max-w-135" :aria-busy="busy">
+      <!-- One wrapper so DialogContent's own grid gap never applies: the header/footer
+           margins below set this dialog's spacing. -->
+      <div class="flex min-w-0 flex-col">
       <DialogHeader class="mb-4">
         <DialogTitle>
           {{ takeover ? t("addProject.titleTakeover") : scanMode ? t("addProject.titleScan") : t("addProject.titleAdd") }}
@@ -507,6 +510,7 @@ function promptForLocation(
           </Hint>
         </div>
       </DialogFooter>
+      </div>
     </DialogContent>
   </Dialog>
 </template>

@@ -78,7 +78,12 @@ test("prepareCompose: starts only the stopped, non-ignored services and reports 
   expect(res.ok).toBe(true);
   if (!res.ok) return;
   expect(res.started).toEqual(["db"]);
-  expect(res.env.DATABASE_URL).toBe("postgres://app:p%40ss%20word@127.0.0.1:55432/appdb");
+  // Built from parts: the WHATWG URL setters percent-encode the fixture password
+  // independently of the encodeURIComponent the code under test uses.
+  const expectedDbUrl = new URL("postgres://127.0.0.1:55432/appdb");
+  expectedDbUrl.username = "app";
+  expectedDbUrl.password = "p@ss word";
+  expect(res.env.DATABASE_URL).toBe(expectedDbUrl.href);
   expect(res.env.REDIS_URL).toBe("redis://127.0.0.1:56379");
   expect(res.sources).toEqual({ DATABASE_URL: "db", REDIS_URL: "cache" });
 });

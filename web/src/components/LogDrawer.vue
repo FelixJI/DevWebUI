@@ -147,8 +147,9 @@ watch(
       <Input
         v-model="filterText"
         type="search"
-        class="h-8 ps-7"
-        :class="filterText ? 'pe-7' : 'pe-2'"
+        leading="icon-sm"
+        :trailing="filterText ? 'icon-sm' : 'none'"
+        class="h-8"
         :placeholder="t('logs.filterPlaceholder')"
         :aria-label="t('logs.filterAriaLabel')"
       />

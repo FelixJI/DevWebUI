@@ -22,22 +22,29 @@ async function freePort(): Promise<number> {
 }
 
 const scratch = mkdtempSync(join(tmpdir(), "devwebui-release-smoke-"));
-mkdirSync(join(scratch, "cwd"));
-const port = await freePort();
-const child = Bun.spawn([binary], {
-  cwd: join(scratch, "cwd"),
-  env: {
-    ...process.env,
-    DEVWEBUI_HOME: join(scratch, "state"),
-    DEVWEBUI_PORT: String(port),
-    DEVWEBUI_NO_OPEN: "1",
-  },
-  stdin: "ignore",
-  stdout: "pipe",
-  stderr: "pipe",
+process.on("exit", () => {
+  try {
+    rmSync(scratch, { recursive: true, force: true });
+  } catch {}
 });
 
+let child: any = undefined;
 try {
+  mkdirSync(join(scratch, "cwd"));
+  const port = await freePort();
+  child = Bun.spawn([binary], {
+    cwd: join(scratch, "cwd"),
+    env: {
+      ...process.env,
+      DEVWEBUI_HOME: join(scratch, "state"),
+      DEVWEBUI_PORT: String(port),
+      DEVWEBUI_NO_OPEN: "1",
+    },
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
   const deadline = Date.now() + 30_000;
   let health: Response | null = null;
   while (Date.now() < deadline && child.exitCode === null) {
@@ -63,8 +70,10 @@ try {
   }
   console.log(`✓ release executable served health, UI, and ${assetPath}`);
 } finally {
-  child.kill();
-  await Promise.race([child.exited, Bun.sleep(5_000)]);
+  if (child) {
+    child.kill();
+    await Promise.race([child.exited, Bun.sleep(5_000)]);
+  }
   await removeScratch(scratch);
 }
 

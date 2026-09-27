@@ -428,18 +428,55 @@ export const useAppStore = defineStore("app", () => {
 
   // ---- project mutations: hit the daemon, then refresh from the source of truth ----
   async function removeProject(id: string) {
-    await api.removeProjectRequest(id);
+    const index = projects.value.findIndex((p) => p.id === id);
+    const removed = projects.value[index];
+    if (removed) projects.value = projects.value.filter((p) => p.id !== id);
+    try {
+      await api.removeProjectRequest(id);
+    } catch (e) {
+      // Put the panel back where it was (unless an SSE snapshot already restored it); the
+      // caller surfaces the error.
+      if (removed && !projects.value.some((p) => p.id === id)) {
+        const next = [...projects.value];
+        next.splice(Math.min(index, next.length), 0, removed);
+        projects.value = next;
+      }
+      throw e;
+    }
     await refresh();
   }
 
   /**
-   * Rename + recolor a project (rewrites its .devwebui file). Returns the raw result so
-   * the caller can surface a validation error; on success the reconcile pushes the updated
+   * Rename + recolor a project (rewrites its .devwebui file). The new name/color show
+   * immediately and roll back if the daemon rejects them. Returns the raw result so the
+   * caller can surface a validation error; on success the reconcile pushes the updated
    * project over SSE, and we refresh as a belt-and-suspenders in case that snapshot lags.
    */
   async function updateProject(id: string, meta: { name: string; color?: string }) {
-    const res = await api.updateProjectRequest(id, meta);
-    if (!res?.error) await refresh();
+    const proj = projects.value.find((p) => p.id === id);
+    const previous = proj ? { name: proj.name, color: proj.color } : null;
+    if (proj) {
+      projects.value = projects.value.map((p) =>
+        p.id === id ? { ...p, name: meta.name, color: meta.color } : p,
+      );
+    }
+    // Restore the old name/color on whatever entry is current (an SSE snapshot may have
+    // replaced it meanwhile; the daemon's copy already carries the old values then).
+    const rollback = () => {
+      if (!previous) return;
+      projects.value = projects.value.map((p) =>
+        p.id === id ? { ...p, name: previous.name, color: previous.color } : p,
+      );
+    };
+    let res: AddResult;
+    try {
+      res = await api.updateProjectRequest(id, meta);
+    } catch (e) {
+      rollback();
+      throw e;
+    }
+    if (res?.error) rollback();
+    else await refresh();
     return res;
   }
 

@@ -47,31 +47,33 @@ const verify = () =>
 
 <template>
   <div class="flex min-h-dvh items-center justify-center p-4">
-    <Card class="w-full max-w-[420px]">
+    <Card class="w-full max-w-105">
       <CardHeader>
         <CardTitle>{{ t("pairing.title") }}</CardTitle>
         <CardDescription>{{ t("pairing.body") }}</CardDescription>
       </CardHeader>
-      <CardContent class="flex flex-col gap-3">
-        <Button v-if="!requestId" :disabled="busy" @click="start">{{ t("pairing.request") }}</Button>
-        <form v-else class="flex flex-col gap-3" @submit.prevent="verify">
-          <p class="text-sm text-muted-foreground" v-html="t('pairing.whereIsCode')" />
-          <Input
-            v-model="code"
-            inputmode="numeric"
-            autocomplete="one-time-code"
-            maxlength="6"
-            :placeholder="t('pairing.codePlaceholder')"
-            :aria-label="t('pairing.codePlaceholder')"
-          />
-          <div class="flex gap-2">
-            <Button type="submit" :disabled="busy || code.trim().length !== 6">{{ t("pairing.verify") }}</Button>
-            <Button type="button" variant="outline" :disabled="busy" @click="start">
-              {{ t("pairing.newCode") }}
-            </Button>
-          </div>
-        </form>
-        <p v-if="error" class="text-sm text-destructive" role="alert">{{ error }}</p>
+      <CardContent>
+        <div class="flex flex-col gap-3">
+          <Button v-if="!requestId" :disabled="busy" @click="start">{{ t("pairing.request") }}</Button>
+          <form v-else class="flex flex-col gap-3" @submit.prevent="verify">
+            <p class="text-sm text-muted-foreground" v-html="t('pairing.whereIsCode')" />
+            <Input
+              v-model="code"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              maxlength="6"
+              :placeholder="t('pairing.codePlaceholder')"
+              :aria-label="t('pairing.codePlaceholder')"
+            />
+            <div class="flex gap-2">
+              <Button type="submit" :disabled="busy || code.trim().length !== 6">{{ t("pairing.verify") }}</Button>
+              <Button type="button" variant="outline" :disabled="busy" @click="start">
+                {{ t("pairing.newCode") }}
+              </Button>
+            </div>
+          </form>
+          <p v-if="error" class="text-sm text-destructive" role="alert">{{ error }}</p>
+        </div>
       </CardContent>
     </Card>
   </div>

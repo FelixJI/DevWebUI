@@ -157,7 +157,7 @@ async function updateApp() {
           <span class="relative flex size-2">
             <span
               v-if="connected"
-              class="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60"
+              class="absolute inline-flex size-full animate-ping rounded-full bg-success opacity-60"
             />
             <span
               class="relative inline-flex size-2 rounded-full"
@@ -185,8 +185,9 @@ async function updateApp() {
         <Input
           v-model="searchQuery"
           type="search"
-          class="h-8 ps-7"
-          :class="searchQuery ? 'pe-7' : 'pe-2'"
+          leading="icon-sm"
+          :trailing="searchQuery ? 'icon-sm' : 'none'"
+          class="h-8"
           :placeholder="t('header.searchPlaceholder')"
           :aria-label="t('header.searchAriaLabel')"
         />
@@ -204,15 +205,19 @@ async function updateApp() {
       <div class="ms-auto flex items-center gap-2">
         <Button
           size="sm"
-          class="group/add h-8 gap-0 overflow-hidden transition-all"
+          class="group/add h-8 overflow-hidden"
           :disabled="busy"
           :aria-label="t('header.addProject')"
           @click="emit('add')"
         >
-          <FolderPlus class="size-4 shrink-0" />
-          <span
-            class="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 ease-out group-hover/add:ms-1.5 group-hover/add:max-w-[7rem] group-hover/add:opacity-100 group-focus-visible/add:ms-1.5 group-focus-visible/add:max-w-[7rem] group-focus-visible/add:opacity-100"
-          >{{ t("header.addProject") }}</span>
+          <!-- One flex child, so the Button's own gap never opens beside the collapsed label;
+               the label's ms-1.5 supplies the spacing only while it is shown. -->
+          <span class="flex items-center">
+            <FolderPlus class="size-4 shrink-0" />
+            <span
+              class="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 ease-out group-hover/add:ms-1.5 group-hover/add:max-w-28 group-hover/add:opacity-100 group-focus-visible/add:ms-1.5 group-focus-visible/add:max-w-28 group-focus-visible/add:opacity-100"
+            >{{ t("header.addProject") }}</span>
+          </span>
         </Button>
 
         <Hint :label="errorCount ? t('header.notificationsWithErrors') : t('header.notifications')">
@@ -226,7 +231,7 @@ async function updateApp() {
             <Bell class="size-[1.15rem]" />
             <span
               v-if="bellCount"
-              class="absolute -right-0.5 -top-0.5 grid min-w-[1rem] place-items-center rounded-full px-1 text-[10px] font-semibold leading-4 text-white ring-2 ring-background"
+              class="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full px-1 text-3xs font-semibold leading-4 text-white ring-2 ring-background"
               :class="errorCount ? 'bg-destructive' : 'bg-primary'"
             >{{ bellCount > 9 ? "9+" : bellCount }}</span>
           </Button>
@@ -323,7 +328,7 @@ async function updateApp() {
 
         <div class="space-y-5 py-1">
           <div class="space-y-2">
-            <Label class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ t("filters.showStatus") }}</Label>
+            <Label><span class="text-xs uppercase tracking-wide text-muted-foreground">{{ t("filters.showStatus") }}</span></Label>
             <div class="grid grid-cols-2 gap-1.5">
               <button
                 v-for="o in statusOptions"

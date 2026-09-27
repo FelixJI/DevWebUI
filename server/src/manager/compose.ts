@@ -140,7 +140,7 @@ function toStringMap(value: unknown): Record<string, string> {
     }
   } else if (value && typeof value === "object") {
     for (const [k, v] of Object.entries(value as Record<string, unknown>))
-      if (v !== null && v !== undefined) out[k] = String(v);
+      if (v != null) out[k] = String(v);
   }
   return out;
 }
@@ -377,6 +377,134 @@ function failure(step: string, r: DockerResult): { ok: false; reason: string } {
   return { ok: false, reason: `docker compose ${step} failed${hint ? `: ${hint}` : ""}` };
 }
 
+type ComposeConfig = ReturnType<typeof parseComposeConfig>;
+
+/** Everything one prepareCompose call threads through its steps. */
+interface ComposeRun {
+  spec: ProcessCompose;
+  cwd: string;
+  args: string[];
+  run: DockerRunner;
+  probe: PortProbe;
+  pollMs: number;
+}
+
+function pause(ms: number): Promise<unknown> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Read the resolved compose config, or the failure to hand back. */
+async function loadComposeConfig(
+  ctx: ComposeRun,
+): Promise<ComposeConfig | { ok: false; reason: string }> {
+  const cfg = await ctx.run(
+    [...ctx.args, "config", "--format", "json"],
+    ctx.cwd,
+    COMPOSE_QUERY_TIMEOUT_MS,
+  );
+  if (cfg.code !== 0) return failure("config", cfg);
+  try {
+    return parseComposeConfig(cfg.stdout);
+  } catch {
+    return { ok: false, reason: "docker compose config did not return JSON (Compose v2 needed)" };
+  }
+}
+
+/** Every configured service with its live state, or the reason listing failed. */
+async function listComposeServices(
+  ctx: ComposeRun,
+  config: ComposeConfig,
+): Promise<ComposeService[] | string> {
+  // --all: an exited one-shot job must show up with its exit code, not vanish.
+  const ps = await ctx.run(
+    [...ctx.args, "ps", "--all", "--format", "json"],
+    ctx.cwd,
+    COMPOSE_QUERY_TIMEOUT_MS,
+  );
+  if (ps.code !== 0) return failure("ps", ps).reason;
+  try {
+    return mergeServices(config, parseComposePs(ps.stdout));
+  } catch {
+    return "docker compose ps did not return JSON";
+  }
+}
+
+/**
+ * `up -d` the wanted services unless skipIfRunning says every one already runs.
+ * Returns the wanted services and the names this call started, or the `up` failure.
+ */
+async function upWantedServices(
+  ctx: ComposeRun,
+  before: ComposeService[],
+): Promise<{ wanted: ComposeService[]; started: string[] } | { ok: false; reason: string }> {
+  const { spec } = ctx;
+  const wanted = before.filter(
+    (s) => !isIgnored(s) && (!spec.services?.length || spec.services.includes(s.name)),
+  );
+  const notRunning = wanted.filter((s) => !s.running && !s.completed).map((s) => s.name);
+  const skip = (spec.skipIfRunning ?? true) && notRunning.length === 0;
+  if (!skip && wanted.length) {
+    const names = wanted.map((s) => s.name);
+    const up = await ctx.run([...ctx.args, "up", "-d", ...names], ctx.cwd, COMPOSE_UP_TIMEOUT_MS);
+    if (up.code !== 0) return failure("up", up);
+  }
+  return { wanted, started: skip ? [] : notRunning };
+}
+
+/** Poll until no wanted service has a pending healthcheck; the live services, or why not. */
+async function waitForHealthy(
+  ctx: ComposeRun,
+  config: ComposeConfig,
+  wantedNames: Set<string>,
+  deadline: number,
+): Promise<ComposeService[] | string> {
+  for (;;) {
+    const after = await listComposeServices(ctx, config);
+    if (typeof after === "string") return after;
+    const live = after.filter((s) => wantedNames.has(s.name));
+    // A container that exited straight after `up` (bad config, port clash) would
+    // otherwise pass readiness vacuously: it publishes no ports to probe.
+    const down = live.filter((s) => !s.running && !s.completed).map((s) => s.name);
+    if (down.length) return `compose service(s) not running: ${down.join(", ")}`;
+    // A defined healthcheck is the stack's own word on readiness: wait it out first.
+    const unhealthy = live.filter(healthPending).map((s) => s.name);
+    if (!unhealthy.length) return live;
+    if (Date.now() >= deadline)
+      return `compose service(s) not healthy in time: ${unhealthy.join(", ")}`;
+    await pause(ctx.pollMs);
+  }
+}
+
+/** Probe one published port until it serves; null when ready, else the timeout reason. */
+async function waitForPort(
+  ctx: ComposeRun,
+  svc: ComposeService,
+  port: PublishedPort,
+  deadline: number,
+): Promise<string | null> {
+  for (;;) {
+    if (await ctx.probe(port.published, port.host)) return null;
+    if (Date.now() >= deadline)
+      return `compose service "${svc.name}" did not accept connections on ${port.host}:${port.published} in time`;
+    await pause(ctx.pollMs);
+  }
+}
+
+/** Wait for every published port of every live service, in order; the first timeout wins. */
+async function waitForPorts(
+  ctx: ComposeRun,
+  live: ComposeService[],
+  deadline: number,
+): Promise<string | null> {
+  for (const svc of live) {
+    for (const port of svc.ports) {
+      const reason = await waitForPort(ctx, svc, port, deadline);
+      if (reason) return reason;
+    }
+  }
+  return null;
+}
+
 /**
  * Bring a process's compose stack up and wait for it. Steps: read the resolved
  * config (images, env, labels), list what is running, `up -d` the wanted services
@@ -390,84 +518,33 @@ export async function prepareCompose(
   cwd: string,
   deps: { run?: DockerRunner; probe?: PortProbe; pollMs?: number } = {},
 ): Promise<ComposeOutcome> {
-  const run = deps.run ?? runDocker;
-  const probe = deps.probe ?? composePortReady;
-  const pollMs = deps.pollMs ?? READINESS_POLL_MS;
-  const pause = () => new Promise((r) => setTimeout(r, pollMs));
-  const args = baseArgs(spec);
-
-  const cfg = await run([...args, "config", "--format", "json"], cwd, COMPOSE_QUERY_TIMEOUT_MS);
-  if (cfg.code !== 0) return failure("config", cfg);
-  let config: ReturnType<typeof parseComposeConfig>;
-  try {
-    config = parseComposeConfig(cfg.stdout);
-  } catch {
-    return { ok: false, reason: "docker compose config did not return JSON (Compose v2 needed)" };
-  }
-
-  const listRunning = async (): Promise<ComposeService[] | string> => {
-    // --all: an exited one-shot job must show up with its exit code, not vanish.
-    const ps = await run(
-      [...args, "ps", "--all", "--format", "json"],
-      cwd,
-      COMPOSE_QUERY_TIMEOUT_MS,
-    );
-    if (ps.code !== 0) return failure("ps", ps).reason;
-    try {
-      return mergeServices(config, parseComposePs(ps.stdout));
-    } catch {
-      return "docker compose ps did not return JSON";
-    }
+  const ctx: ComposeRun = {
+    spec,
+    cwd,
+    args: baseArgs(spec),
+    run: deps.run ?? runDocker,
+    probe: deps.probe ?? composePortReady,
+    pollMs: deps.pollMs ?? READINESS_POLL_MS,
   };
 
-  const before = await listRunning();
+  const config = await loadComposeConfig(ctx);
+  if (!(config instanceof Map)) return config;
+
+  const before = await listComposeServices(ctx, config);
   if (typeof before === "string") return { ok: false, reason: before };
-  const wanted = before.filter(
-    (s) => !isIgnored(s) && (!spec.services?.length || spec.services.includes(s.name)),
-  );
-  const notRunning = wanted.filter((s) => !s.running && !s.completed).map((s) => s.name);
-  const skip = (spec.skipIfRunning ?? true) && notRunning.length === 0;
-  if (!skip && wanted.length) {
-    const names = wanted.map((s) => s.name);
-    const up = await run([...args, "up", "-d", ...names], cwd, COMPOSE_UP_TIMEOUT_MS);
-    if (up.code !== 0) return failure("up", up);
-  }
+  const plan = await upWantedServices(ctx, before);
+  if ("reason" in plan) return plan;
 
   // From here on `up` has run: every failure hands back what it started, so a
   // start-and-stop caller can still stop it.
-  const started = skip ? [] : notRunning;
+  const { wanted, started } = plan;
   const fail = (reason: string): ComposeOutcome => ({ ok: false, reason, started });
   const wantedNames = new Set(wanted.map((s) => s.name));
   const deadline = Date.now() + (spec.readinessTimeoutMs ?? COMPOSE_READINESS_TIMEOUT_MS);
-  let live: ComposeService[];
-  for (;;) {
-    const after = await listRunning();
-    if (typeof after === "string") return fail(after);
-    live = after.filter((s) => wantedNames.has(s.name));
-    // A container that exited straight after `up` (bad config, port clash) would
-    // otherwise pass readiness vacuously: it publishes no ports to probe.
-    const down = live.filter((s) => !s.running && !s.completed).map((s) => s.name);
-    if (down.length) return fail(`compose service(s) not running: ${down.join(", ")}`);
-    // A defined healthcheck is the stack's own word on readiness: wait it out first.
-    const unhealthy = live.filter(healthPending).map((s) => s.name);
-    if (!unhealthy.length) break;
-    if (Date.now() >= deadline)
-      return fail(`compose service(s) not healthy in time: ${unhealthy.join(", ")}`);
-    await pause();
-  }
-
-  for (const svc of live) {
-    for (const port of svc.ports) {
-      for (;;) {
-        if (await probe(port.published, port.host)) break;
-        if (Date.now() >= deadline)
-          return fail(
-            `compose service "${svc.name}" did not accept connections on ${port.host}:${port.published} in time`,
-          );
-        await pause();
-      }
-    }
-  }
+  const live = await waitForHealthy(ctx, config, wantedNames, deadline);
+  if (typeof live === "string") return fail(live);
+  const portFailure = await waitForPorts(ctx, live, deadline);
+  if (portFailure) return fail(portFailure);
 
   const { env, sources } =
     spec.injectEnv === false ? { env: {}, sources: {} } : connectionEnv(live);

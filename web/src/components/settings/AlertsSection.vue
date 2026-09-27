@@ -123,7 +123,7 @@ function clearEvents() {
         {{ t("alerts.noRules") }}
       </p>
       <div v-for="r in rules" :key="r.id" class="flex items-center gap-3 px-3.5 py-2.5">
-        <AlertTriangle class="size-[18px] shrink-0 text-muted-foreground" />
+        <AlertTriangle class="size-4.5 shrink-0 text-muted-foreground" />
         <span class="min-w-0 flex-1 truncate text-sm text-foreground">
           {{ processLabel(r.processId) }}
           <span class="text-muted-foreground">

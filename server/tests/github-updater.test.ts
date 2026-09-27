@@ -233,7 +233,9 @@ test("both endpoints down reports the primary failure, not the backstop's", asyn
 // too-young latest release is never offered, that the newest OLD-ENOUGH release is offered in
 // its place, and that an unreachable release list fails closed rather than open.
 const DAY = 24 * 60 * 60 * 1000;
-const NOW = Date.parse("2026-09-25T00:00:00Z");
+// A frozen clock passed explicitly to every call below, fixed well in the past so it can never
+// drift across the real "now" while the suite ages.
+const NOW = Date.parse("2020-01-01T00:00:00Z");
 const daysAgo = (n: number) => new Date(NOW - n * DAY).toISOString();
 
 test("releaseAged: under a cooldown, too-young or undated releases are not old enough", () => {

@@ -48,9 +48,18 @@ function makeProjectFile(over: Record<string, unknown> = {}): string {
   return file;
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: reading arbitrary hand-added keys back for assertions
-function readRaw(file: string): any {
-  return JSON.parse(readFileSync(file, "utf8"));
+/** A .devwebui as it sits on disk: its processes plus any keys a user hand-added. */
+interface RawProcess {
+  id: string;
+  [key: string]: unknown;
+}
+interface RawProjectFile {
+  processes: RawProcess[];
+  [key: string]: unknown;
+}
+
+function readRaw(file: string): RawProjectFile {
+  return JSON.parse(readFileSync(file, "utf8")) as RawProjectFile;
 }
 
 // ── (a) atomic writes ───────────────────────────────────────────────────────────────────────

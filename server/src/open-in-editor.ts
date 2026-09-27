@@ -3,7 +3,7 @@
 // the editor from the process list, speak each editor's own line/column flag, refuse bad input
 // before spawning) follows create-react-app's react-dev-utils/launchEditor.js (MIT); the code
 // is written fresh for DevWebUI. Two deliberate departures from it:
-//  · the Windows process scan is Get-CimInstance Win32_Process, not the deprecated wmic;
+//  · the Windows process scan is Get-CimInstance Win32_Process, not the retired wmic;
 //  · the launch goes through buildDetachedSpawn (WMI Win32_Process.Create on Windows), never
 //    `cmd.exe /C`, so no cmd re-parse exists for a crafted file name to exploit, and an editor
 //    started here outlives a daemon restart instead of being tree-killed with it.

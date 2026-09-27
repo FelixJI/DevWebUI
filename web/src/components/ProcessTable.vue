@@ -136,92 +136,116 @@ function onStop(p: ProcessView) {
   <div class="overflow-hidden rounded-lg border border-border">
     <Table>
       <TableHeader>
-        <TableRow class="bg-muted/40 hover:bg-muted/40">
+        <TableRow variant="tinted">
           <!-- Process soaks up the table's spare width; every other column is content-sized (w-px). -->
           <TableHead class="w-full">
             <Button
               variant="ghost"
-              size="sm"
-              class="-ms-1 h-auto gap-1 px-1 py-0.5 font-medium text-muted-foreground hover:text-foreground"
-              :class="sortKey === 'name' ? 'text-foreground' : ''"
+              size="compact"
+              class="-ms-1"
               @click="store.toggleSort('name')"
             >
-              {{ t("processTable.colProcess") }}
-              <component :is="sortIcon('name')" class="size-3" :class="sortKey === 'name' ? '' : 'opacity-40'" />
+              <span
+                class="inline-flex items-center gap-1"
+                :class="sortKey === 'name' ? 'text-foreground' : 'text-muted-foreground group-hover/button:text-foreground'"
+              >
+                {{ t("processTable.colProcess") }}
+                <component :is="sortIcon('name')" class="size-3" :class="sortKey === 'name' ? '' : 'opacity-40'" />
+              </span>
             </Button>
           </TableHead>
           <TableHead class="hidden w-px md:table-cell">{{ t("processTable.colEngine") }}</TableHead>
           <TableHead class="w-px">
             <Button
               variant="ghost"
-              size="sm"
-              class="-ms-1 h-auto gap-1 px-1 py-0.5 font-medium text-muted-foreground hover:text-foreground"
-              :class="sortKey === 'status' ? 'text-foreground' : ''"
+              size="compact"
+              class="-ms-1"
               @click="store.toggleSort('status')"
             >
-              {{ t("processTable.colStatus") }}
-              <component :is="sortIcon('status')" class="size-3" :class="sortKey === 'status' ? '' : 'opacity-40'" />
+              <span
+                class="inline-flex items-center gap-1"
+                :class="sortKey === 'status' ? 'text-foreground' : 'text-muted-foreground group-hover/button:text-foreground'"
+              >
+                {{ t("processTable.colStatus") }}
+                <component :is="sortIcon('status')" class="size-3" :class="sortKey === 'status' ? '' : 'opacity-40'" />
+              </span>
             </Button>
           </TableHead>
           <TableHead class="w-px">
             <Button
               variant="ghost"
-              size="sm"
-              class="h-auto w-full justify-end gap-1 px-1 py-0.5 font-medium text-muted-foreground hover:text-foreground"
-              :class="sortKey === 'port' ? 'text-foreground' : ''"
+              size="compact"
+              class="w-full justify-end"
               @click="store.toggleSort('port')"
             >
-              {{ t("processTable.colPort") }}
-              <component :is="sortIcon('port')" class="size-3" :class="sortKey === 'port' ? '' : 'opacity-40'" />
+              <span
+                class="inline-flex items-center gap-1"
+                :class="sortKey === 'port' ? 'text-foreground' : 'text-muted-foreground group-hover/button:text-foreground'"
+              >
+                {{ t("processTable.colPort") }}
+                <component :is="sortIcon('port')" class="size-3" :class="sortKey === 'port' ? '' : 'opacity-40'" />
+              </span>
             </Button>
           </TableHead>
           <TableHead class="w-px">
             <Button
               variant="ghost"
-              size="sm"
-              class="h-auto w-full justify-end gap-1 px-1 py-0.5 font-medium text-muted-foreground hover:text-foreground"
-              :class="sortKey === 'uptime' ? 'text-foreground' : ''"
+              size="compact"
+              class="w-full justify-end"
               @click="store.toggleSort('uptime')"
             >
-              {{ t("processTable.colUptime") }}
-              <component :is="sortIcon('uptime')" class="size-3" :class="sortKey === 'uptime' ? '' : 'opacity-40'" />
+              <span
+                class="inline-flex items-center gap-1"
+                :class="sortKey === 'uptime' ? 'text-foreground' : 'text-muted-foreground group-hover/button:text-foreground'"
+              >
+                {{ t("processTable.colUptime") }}
+                <component :is="sortIcon('uptime')" class="size-3" :class="sortKey === 'uptime' ? '' : 'opacity-40'" />
+              </span>
             </Button>
           </TableHead>
           <TableHead v-if="monitorResources" class="hidden w-px md:table-cell">
             <Button
               variant="ghost"
-              size="sm"
-              class="h-auto w-full justify-end gap-1 px-1 py-0.5 font-medium text-muted-foreground hover:text-foreground"
-              :class="sortKey === 'cpu' ? 'text-foreground' : ''"
+              size="compact"
+              class="w-full justify-end"
               @click="store.toggleSort('cpu')"
             >
-              <Cpu class="size-3" /> {{ t("processTable.colCpu") }}
-              <component :is="sortIcon('cpu')" class="size-3" :class="sortKey === 'cpu' ? '' : 'opacity-40'" />
+              <span
+                class="inline-flex items-center gap-1"
+                :class="sortKey === 'cpu' ? 'text-foreground' : 'text-muted-foreground group-hover/button:text-foreground'"
+              >
+                <Cpu class="size-3" /> {{ t("processTable.colCpu") }}
+                <component :is="sortIcon('cpu')" class="size-3" :class="sortKey === 'cpu' ? '' : 'opacity-40'" />
+              </span>
             </Button>
           </TableHead>
           <TableHead v-if="monitorResources" class="hidden w-px md:table-cell">
             <Button
               variant="ghost"
-              size="sm"
-              class="h-auto w-full justify-end gap-1 px-1 py-0.5 font-medium text-muted-foreground hover:text-foreground"
-              :class="sortKey === 'memory' ? 'text-foreground' : ''"
+              size="compact"
+              class="w-full justify-end"
               @click="store.toggleSort('memory')"
             >
-              <MemoryStick class="size-3" /> {{ t("processTable.colMem") }}
-              <component :is="sortIcon('memory')" class="size-3" :class="sortKey === 'memory' ? '' : 'opacity-40'" />
+              <span
+                class="inline-flex items-center gap-1"
+                :class="sortKey === 'memory' ? 'text-foreground' : 'text-muted-foreground group-hover/button:text-foreground'"
+              >
+                <MemoryStick class="size-3" /> {{ t("processTable.colMem") }}
+                <component :is="sortIcon('memory')" class="size-3" :class="sortKey === 'memory' ? '' : 'opacity-40'" />
+              </span>
             </Button>
           </TableHead>
           <TableHead class="w-px text-end">{{ t("processTable.colActions") }}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        <TableRow v-for="p in processes" :key="p.id" :class="p.enabled ? '' : 'opacity-60'">
+        <TableRow v-for="p in processes" :key="p.id" :variant="p.enabled ? 'default' : 'dimmed'">
           <!-- Process: colour dot + name -->
           <TableCell>
             <div class="flex min-w-0 items-center gap-2">
               <span
-                class="size-2.5 shrink-0 rounded-full"
-                :style="{ background: p.color || 'var(--primary)' }"
+                class="size-2.5 shrink-0 rounded-full bg-(--dot-color)"
+                :style="{ '--dot-color': p.color || 'var(--primary)' }"
               />
               <Star
                 v-if="p.starred"
@@ -266,8 +290,8 @@ function onStop(p: ProcessView) {
           <!-- Command, condensed to its engine (the launching executable); hover the chip for the full command. -->
           <TableCell class="hidden md:table-cell">
             <Hint>
-              <Badge variant="outline" class="font-mono text-[11px] font-normal text-muted-foreground">
-                {{ commandEngine(p.command) }}
+              <Badge variant="outline">
+                <span class="font-mono text-2xs font-normal text-muted-foreground">{{ commandEngine(p.command) }}</span>
               </Badge>
               <template #label>
                 <code class="break-all">{{ p.command }}</code>
@@ -282,12 +306,12 @@ function onStop(p: ProcessView) {
                 v-if="p.status === 'waiting' && p.waitingOnPort"
                 :label="t('processTable.waitingForPort', { port: p.waitingOnPort })"
               >
-                <Badge variant="outline" class="capitalize" :class="statusPill(p.status).badge">
-                  {{ statusPill(p.status).label }}
+                <Badge :variant="statusPill(p.status).variant">
+                  <span class="capitalize">{{ statusPill(p.status).label }}</span>
                 </Badge>
               </Hint>
-              <Badge v-else variant="outline" class="capitalize" :class="statusPill(p.status).badge">
-                {{ statusPill(p.status).label }}
+              <Badge v-else :variant="statusPill(p.status).variant">
+                <span class="capitalize">{{ statusPill(p.status).label }}</span>
               </Badge>
               <Hint v-if="errorCountByProcess[p.id]" :label="t('processTable.errorCountAriaLabel', errorCountByProcess[p.id])">
                 <button
@@ -314,7 +338,7 @@ function onStop(p: ProcessView) {
           </TableCell>
 
           <!-- Port. On conflict: amber number + a warning icon that toasts/frees the holder. -->
-          <TableCell class="text-end tabular-nums">
+          <TableCell class="text-end">
             <span v-if="p.port == null" class="text-muted-foreground">—</span>
             <span v-else class="inline-flex items-center justify-end gap-1">
               <Hint v-if="p.conflict" :label="t('processTable.freePortAriaLabel', { port: p.port })">
@@ -326,16 +350,16 @@ function onStop(p: ProcessView) {
                   <TriangleAlert class="size-3.5" />
                 </button>
               </Hint>
-              <span :class="p.conflict ? 'text-warning' : ''">{{ p.port }}</span>
+              <span class="tabular-nums" :class="p.conflict ? 'text-warning' : ''">{{ p.port }}</span>
             </span>
           </TableCell>
 
           <!-- Uptime / CPU / Mem -->
-          <TableCell class="text-end tabular-nums">
-            {{ formatUptime(now, p.startedAt, p.status === "running") }}
+          <TableCell class="text-end">
+            <span class="tabular-nums">{{ formatUptime(now, p.startedAt, p.status === "running") }}</span>
           </TableCell>
-          <TableCell v-if="monitorResources" class="hidden text-end tabular-nums md:table-cell">{{ p.cpu != null ? `${p.cpu}%` : "—" }}</TableCell>
-          <TableCell v-if="monitorResources" class="hidden text-end tabular-nums md:table-cell">{{ formatBytes(p.memory) }}</TableCell>
+          <TableCell v-if="monitorResources" class="hidden text-end md:table-cell"><span class="tabular-nums">{{ p.cpu != null ? `${p.cpu}%` : "—" }}</span></TableCell>
+          <TableCell v-if="monitorResources" class="hidden text-end md:table-cell"><span class="tabular-nums">{{ formatBytes(p.memory) }}</span></TableCell>
 
           <!-- Actions. Star + enable/disable live in the ⋮ menu so the row stays narrow (no
                horizontal scroll); the enabled state still reads at a glance from the row's opacity,

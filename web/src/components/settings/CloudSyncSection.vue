@@ -82,14 +82,14 @@ async function onDisconnectClick() {
   <SettingsGroup :label="t('cloudSync.title')">
     <!-- Loading -->
     <SettingsRow v-if="store.syncLoading && !status">
-      <template #icon><RefreshCw class="size-[18px] shrink-0 animate-spin text-muted-foreground" /></template>
+      <template #icon><RefreshCw class="size-4.5 shrink-0 animate-spin text-muted-foreground" /></template>
       <template #label>{{ t("cloudSync.loading") }}</template>
     </SettingsRow>
 
     <!-- Not connected: sign-in CTA -->
     <div v-else-if="!connected" class="px-3.5 py-2.5">
       <Button variant="outline" class="w-full" @click="goSignIn">
-        <Cloud class="size-3.5 text-sky-500" />
+        <Cloud class="size-3.5 text-info" />
         {{ t("cloudSync.connectButton") }}
         <ExternalLink class="size-3.5 opacity-70" />
       </Button>
@@ -104,19 +104,19 @@ async function onDisconnectClick() {
       </SettingsRow>
       <SettingsRow v-if="enabled" :label="status?.name || status?.email || ''">
         <template #icon>
-          <img v-if="status?.picture" :src="status.picture" alt="" class="size-[18px] rounded-full object-cover shrink-0" />
-          <User v-else class="size-[18px] shrink-0 text-muted-foreground" />
+          <img v-if="status?.picture" :src="status.picture" alt="" class="size-4.5 rounded-full object-cover shrink-0" />
+          <User v-else class="size-4.5 shrink-0 text-muted-foreground" />
         </template>
         <template #control>
           <!-- live sync status stays visible (not tucked behind the info icon like static help) -->
-          <span class="text-[12px] text-muted-foreground">{{ syncedLabel }}</span>
+          <span class="text-xs text-muted-foreground">{{ syncedLabel }}</span>
           <IconButton :tooltip="t('cloudSync.syncNow')" :disabled="store.syncLoading" @click="onSyncNow">
             <RefreshCw class="size-3.5" :class="{ 'animate-spin': store.syncLoading }" />
           </IconButton>
         </template>
       </SettingsRow>
       <SettingsRow>
-        <template #icon><LogOut class="size-[18px] shrink-0 text-muted-foreground" /></template>
+        <template #icon><LogOut class="size-4.5 shrink-0 text-muted-foreground" /></template>
         <template #label>
           {{ confirmingDisconnect ? t("cloudSync.confirmDisconnect") : t("cloudSync.stopSyncing") }}
         </template>

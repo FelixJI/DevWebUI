@@ -4,21 +4,24 @@
 const name = process.argv[2] || "demo";
 const port = Number(process.argv[3] || 0);
 let n = 0;
+let server = null;
 
 console.log(`[${name}] starting up…`);
 
 if (port) {
   const http = await import("node:http");
-  http
+  server = http
     .createServer((_req, res) => res.end(`${name} ok\n`))
     .listen(port, () => console.log(`[${name}] listening on http://localhost:${port}`));
 }
 
-setInterval(() => {
+const ticker = setInterval(() => {
   console.log(`[${name}] tick ${++n} @ ${new Date().toLocaleTimeString()}`);
 }, 1500);
 
 process.on("SIGTERM", () => {
   console.log(`[${name}] shutting down`);
+  clearInterval(ticker);
+  server?.close();
   process.exit(0);
 });

@@ -214,109 +214,113 @@ async function checkAutostart() {
 </script>
 
 <template>
-  <Collapsible
-    v-if="!hiddenBySearch"
-    :open="open"
-    class="overflow-hidden rounded-xl border border-border bg-card/40"
-    @update:open="onOpen"
-  >
-    <div class="flex items-center gap-2 px-2.5 py-3 sm:px-4">
-      <CollapsibleTrigger
-        class="group -mx-1 flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-1 py-0.5 text-start outline-none transition hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring active:opacity-60"
-        :aria-label="t('projectPanel.triggerAriaLabel', { name: project.name, running, total, action: open ? t('projectPanel.collapse') : t('projectPanel.expand') })"
-      >
-        <ChevronDown
-          class="size-4 shrink-0 text-muted-foreground transition-transform"
-          :class="open ? '' : '-rotate-90'"
-        />
-        <Boxes
-          class="size-[18px] shrink-0"
-          :class="project.enabled ? (project.color ? '' : 'text-primary') : 'text-muted-foreground'"
-          :style="project.enabled && project.color ? { color: project.color } : undefined"
-        />
-        <span class="truncate font-semibold" :class="project.enabled ? '' : 'text-muted-foreground'">
-          {{ project.name }}
-        </span>
-        <Badge
-          aria-hidden="true"
-          variant="outline"
-          :class="running > 0 ? statusPill('running').badge : 'text-muted-foreground'"
-        >
-          {{ running }}/{{ total }}
-        </Badge>
-      </CollapsibleTrigger>
+  <!-- The panel's frame lives on this plain wrapper: the Collapsible owns its shape. -->
+  <div v-if="!hiddenBySearch" class="overflow-hidden rounded-xl border border-border bg-card/40">
+    <Collapsible :open="open" @update:open="onOpen">
+      <div class="flex items-center gap-2 px-2.5 py-3 sm:px-4">
+        <CollapsibleTrigger as-child>
+          <button
+            type="button"
+            class="group -mx-1 flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-1 py-0.5 text-start outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring active:opacity-60"
+            :aria-label="t('projectPanel.triggerAriaLabel', { name: project.name, running, total, action: open ? t('projectPanel.collapse') : t('projectPanel.expand') })"
+          >
+            <ChevronDown
+              class="size-4 shrink-0 text-muted-foreground transition-transform"
+              :class="open ? '' : '-rotate-90'"
+            />
+            <Boxes
+              class="size-4.5 shrink-0"
+              :class="project.enabled ? 'text-(--project-color)' : 'text-muted-foreground'"
+              :style="{ '--project-color': project.color || 'var(--primary)' }"
+            />
+            <span class="truncate font-semibold" :class="project.enabled ? '' : 'text-muted-foreground'">
+              {{ project.name }}
+            </span>
+            <Badge
+              aria-hidden="true"
+              :variant="running > 0 ? statusPill('running').variant : 'outline'"
+            >
+              <span :class="running > 0 ? '' : 'text-muted-foreground'">{{ running }}/{{ total }}</span>
+            </Badge>
+          </button>
+        </CollapsibleTrigger>
 
-      <div v-auto-animate class="flex shrink-0 items-center gap-1">
-        <Switch
-          :model-value="project.enabled"
-          class="me-1"
-          :aria-label="project.enabled ? t('projectPanel.disableStack', { name: project.name }) : t('projectPanel.enableStack', { name: project.name })"
-          :title="tooltipsEnabled ? (project.enabled ? t('projectPanel.stackOnTitle') : t('projectPanel.stackOffTitle')) : undefined"
-          @update:model-value="onToggleStack"
-        />
-        <IconButton v-if="open" :tooltip="t('projectPanel.startAll')" @click="runAction(() => startProject(project.id))">
-          <Play class="size-4 text-success" />
-        </IconButton>
-        <IconButton v-if="open" :tooltip="t('projectPanel.stopAll')" @click="runAction(() => stopProject(project.id))">
-          <Square class="size-4" />
-        </IconButton>
-        <DropdownMenu>
-          <DropdownMenuTrigger as-child>
-            <Button variant="ghost" size="icon-sm" :aria-label="t('projectPanel.moreActions')">
-              <EllipsisVertical class="size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" class="max-w-44">
-            <DropdownMenuItem @select="openEditDialog">
-              <Pencil class="size-4" /> {{ t("projectPanel.editProject") }}
-            </DropdownMenuItem>
-            <DropdownMenuItem @select="emit('addProcess', project.id)">
-              <Plus class="size-4" /> {{ t("projectPanel.addProcess") }}
-            </DropdownMenuItem>
-            <DropdownMenuItem @select="addProjectShortcut(project.id)">
-              <MonitorDown class="size-4" /> {{ t("shortcut.addToDesktop") }}
-            </DropdownMenuItem>
-            <DropdownMenuItem @select="checkAutostart">
-              <ShieldCheck class="size-4" /> {{ t("projectPanel.checkAutostart") }}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" @select="removeDialogOpen = true">
-              <Trash2 class="size-4" /> {{ t("projectPanel.removeProject") }}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div v-auto-animate class="flex shrink-0 items-center gap-1">
+          <Switch
+            :model-value="project.enabled"
+            class="me-1"
+            :aria-label="project.enabled ? t('projectPanel.disableStack', { name: project.name }) : t('projectPanel.enableStack', { name: project.name })"
+            :title="tooltipsEnabled ? (project.enabled ? t('projectPanel.stackOnTitle') : t('projectPanel.stackOffTitle')) : undefined"
+            @update:model-value="onToggleStack"
+          />
+          <IconButton v-if="open" :tooltip="t('projectPanel.startAll')" @click="runAction(() => startProject(project.id))">
+            <Play class="size-4 text-success" />
+          </IconButton>
+          <IconButton v-if="open" :tooltip="t('projectPanel.stopAll')" @click="runAction(() => stopProject(project.id))">
+            <Square class="size-4" />
+          </IconButton>
+          <DropdownMenu>
+            <DropdownMenuTrigger as-child>
+              <Button variant="ghost" size="icon-sm" :aria-label="t('projectPanel.moreActions')">
+                <EllipsisVertical class="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" class="max-w-44">
+              <DropdownMenuItem @select="openEditDialog">
+                <Pencil class="size-4" /> {{ t("projectPanel.editProject") }}
+              </DropdownMenuItem>
+              <DropdownMenuItem @select="emit('addProcess', project.id)">
+                <Plus class="size-4" /> {{ t("projectPanel.addProcess") }}
+              </DropdownMenuItem>
+              <DropdownMenuItem @select="addProjectShortcut(project.id)">
+                <MonitorDown class="size-4" /> {{ t("shortcut.addToDesktop") }}
+              </DropdownMenuItem>
+              <DropdownMenuItem @select="checkAutostart">
+                <ShieldCheck class="size-4" /> {{ t("projectPanel.checkAutostart") }}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" @select="removeDialogOpen = true">
+                <Trash2 class="size-4" /> {{ t("projectPanel.removeProject") }}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
-    </div>
 
-    <CollapsibleContent :class="project.enabled ? '' : 'opacity-50'">
-      <p
-        v-if="filteredEmpty"
-        class="px-2.5 pb-4 pt-0 text-sm text-muted-foreground sm:px-4"
-      >
-        {{ t("projectPanel.noProcessesMatch") }}
-      </p>
-      <!-- pt-1 keeps the first row's top border clear of the CollapsibleContent's
-           overflow-hidden edge, which otherwise shaves it at some zoom levels. -->
-      <div v-else-if="viewMode === 'table'" class="px-2.5 pb-4 pt-1 sm:px-4">
-        <ProcessTable
-          :processes="arranged"
-          @logs="(p) => emit('logs', p.id)"
-          @edit="(p) => emit('editProcess', project.id, p)"
-          @errors="(p) => emit('errorsProcess', p.id)"
-        />
-      </div>
-      <div v-else class="grid grid-cols-1 gap-4 px-2.5 pb-4 pt-1 sm:grid-cols-2 sm:px-4">
-        <ProcessCard
-          v-for="p in arranged"
-          :key="p.id"
-          :process="p"
-          @logs="emit('logs', p.id)"
-          @edit="emit('editProcess', project.id, p)"
-          @errors="emit('errorsProcess', p.id)"
-        />
-      </div>
-    </CollapsibleContent>
-  </Collapsible>
+      <CollapsibleContent>
+        <!-- A disabled stack dims its contents; the dimming lives on this plain wrapper
+             because the CollapsibleContent owns its own effects. -->
+        <div :class="project.enabled ? '' : 'opacity-50'">
+          <p
+            v-if="filteredEmpty"
+            class="px-2.5 pb-4 pt-0 text-sm text-muted-foreground sm:px-4"
+          >
+            {{ t("projectPanel.noProcessesMatch") }}
+          </p>
+          <!-- pt-1 keeps the first row's top border clear of the CollapsibleContent's
+               overflow-hidden edge, which otherwise shaves it at some zoom levels. -->
+          <div v-else-if="viewMode === 'table'" class="px-2.5 pb-4 pt-1 sm:px-4">
+            <ProcessTable
+              :processes="arranged"
+              @logs="(p) => emit('logs', p.id)"
+              @edit="(p) => emit('editProcess', project.id, p)"
+              @errors="(p) => emit('errorsProcess', p.id)"
+            />
+          </div>
+          <div v-else class="grid grid-cols-1 gap-4 px-2.5 pb-4 pt-1 sm:grid-cols-2 sm:px-4">
+            <ProcessCard
+              v-for="p in arranged"
+              :key="p.id"
+              :process="p"
+              @logs="emit('logs', p.id)"
+              @edit="emit('editProcess', project.id, p)"
+              @errors="emit('errorsProcess', p.id)"
+            />
+          </div>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  </div>
 
   <Dialog v-model:open="removeDialogOpen">
     <DialogContent>
@@ -334,7 +338,7 @@ async function checkAutostart() {
   </Dialog>
 
   <Dialog v-model:open="editDialogOpen">
-    <DialogContent class="sm:max-w-[440px]" :aria-busy="editSaving">
+    <DialogContent class="sm:max-w-110" :aria-busy="editSaving">
       <DialogHeader>
         <DialogTitle>{{ t("projectPanel.editProjectTitle") }}</DialogTitle>
         <DialogDescription class="sr-only">{{ t("projectPanel.editProjectDescription") }}</DialogDescription>
@@ -347,7 +351,7 @@ async function checkAutostart() {
 
         <div class="flex items-end gap-3">
           <div class="min-w-0 flex-1">
-            <Label for="pe-name" class="mb-1.5 block text-sm font-normal">{{ t("projectPanel.editNameLabel") }}</Label>
+            <Label for="pe-name" class="mb-1.5 block"><span class="text-sm font-normal">{{ t("projectPanel.editNameLabel") }}</span></Label>
             <Input
               id="pe-name"
               v-model="editName"
@@ -356,11 +360,11 @@ async function checkAutostart() {
             />
           </div>
           <div class="shrink-0">
-            <Label class="mb-1.5 block text-sm font-normal">{{ t("projectPanel.editColorLabel") }}</Label>
+            <Label class="mb-1.5 block"><span class="text-sm font-normal">{{ t("projectPanel.editColorLabel") }}</span></Label>
             <div class="flex items-center gap-1.5">
               <label
-                class="relative block size-9 cursor-pointer overflow-hidden rounded-md border border-border"
-                :style="{ backgroundColor: editColor || 'var(--primary)' }"
+                class="relative block size-9 cursor-pointer overflow-hidden rounded-md border border-border bg-(--swatch-color)"
+                :style="{ '--swatch-color': editColor || 'var(--primary)' }"
                 :title="editColor || t('projectPanel.editColorPick')"
               >
                 <input
@@ -396,7 +400,7 @@ async function checkAutostart() {
   </Dialog>
 
   <Dialog v-model:open="takeoverCheckOpen">
-    <DialogContent class="sm:max-w-[480px]">
+    <DialogContent class="sm:max-w-120">
       <DialogHeader>
         <DialogTitle>{{ t("projectPanel.takeoverCheckTitle") }}</DialogTitle>
         <DialogDescription class="sr-only">{{ t("projectPanel.takeoverCheckDescription") }}</DialogDescription>

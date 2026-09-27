@@ -104,6 +104,158 @@ function lowerUnits(s: string): string[] {
   return out;
 }
 
+/** The DP tables shared by the phases of one fuzzyMatch call. */
+interface DpTable {
+  txt: string[];
+  pat: string[];
+  M: number;
+  N: number;
+  /** F[i] is the first column pattern char i can occupy. */
+  F: Int32Array;
+  /** Last occurrence of the final pattern char. */
+  lastIdx: number;
+  H: Int32Array;
+  C: Int32Array;
+  B: Int32Array;
+}
+
+interface Best {
+  score: number;
+  pos: number;
+}
+
+interface Cell {
+  score: number;
+  consecutive: number;
+}
+
+const NO_MATCH: Cell = { score: 0, consecutive: 0 };
+
+function gapPenalty(inGap: boolean): number {
+  return inGap ? SCORE_GAP_EXTENSION : SCORE_GAP_START;
+}
+
+// Phase 1: F[i] is the first column pattern char i can occupy; lastIdx is the last
+// occurrence of the final pattern char. Not a subsequence -> null, before any DP.
+function firstOccurrences(txt: string[], pat: string[]): { F: Int32Array; lastIdx: number } | null {
+  const M = pat.length;
+  const F = new Int32Array(M);
+  let pidx = 0;
+  let lastIdx = -1;
+  for (let j = 0; j < txt.length; j++) {
+    if (txt[j] === pat[Math.min(pidx, M - 1)]) {
+      if (pidx < M) F[pidx++] = j;
+      lastIdx = j;
+    }
+  }
+  return pidx < M ? null : { F, lastIdx };
+}
+
+// Phase 2: per-column bonuses, and row 0 (the first pattern char, bonus doubled).
+// Only a single-char pattern takes its best from this row.
+function scoreFirstRow(dp: DpTable, text: string, cfg: SchemeConfig): Best {
+  const best: Best = { score: 0, pos: -1 };
+  let prevClass = cfg.initialClass;
+  let inGap = false;
+  let prevH = 0;
+  for (let j = 0; j <= dp.lastIdx; j++) {
+    const cls = charClassOf(text[j], cfg.delimiters);
+    const bonus = bonusFor(prevClass, cls, cfg);
+    dp.B[j] = bonus;
+    prevClass = cls;
+    const matched = dp.txt[j] === dp.pat[0];
+    dp.H[j] = matched
+      ? SCORE_MATCH + bonus * BONUS_FIRST_CHAR_MULTIPLIER
+      : Math.max(prevH + gapPenalty(inGap), 0);
+    dp.C[j] = matched ? 1 : 0;
+    if (matched && dp.M === 1 && dp.H[j] > best.score) {
+      best.score = dp.H[j];
+      best.pos = j;
+      // Nothing later can beat a boundary hit by enough to matter; take the first.
+      if (bonus >= BONUS_BOUNDARY) break;
+    }
+    inGap = !matched;
+    prevH = dp.H[j];
+  }
+  return best;
+}
+
+/** Score of a match at column j of the row after `prev`, given the gap score s2. */
+function matchCell(dp: DpTable, prev: number, j: number, s2: number): Cell {
+  let score = dp.H[prev + j - 1] + SCORE_MATCH;
+  let b = dp.B[j];
+  let consecutive = dp.C[prev + j - 1] + 1;
+  if (consecutive > 1) {
+    const fb = dp.B[j - consecutive + 1];
+    // A strong boundary mid-run starts a fresh chunk instead of extending the old one.
+    if (b >= BONUS_BOUNDARY && b > fb) consecutive = 1;
+    else b = Math.max(b, BONUS_CONSECUTIVE, fb);
+  }
+  if (score + b < s2) {
+    score += dp.B[j];
+    consecutive = 0;
+  } else {
+    score += b;
+  }
+  return { score, consecutive };
+}
+
+// Phase 3: fill row i. H[row + F[i] - 1] stays 0 as the left edge.
+function fillRow(dp: DpTable, i: number, best: Best): void {
+  const row = i * dp.N;
+  const prev = row - dp.N;
+  const pc = dp.pat[i];
+  const isLastRow = i === dp.M - 1;
+  let inGap = false;
+  for (let j = dp.F[i]; j <= dp.lastIdx; j++) {
+    const s2: number = dp.H[row + j - 1] + gapPenalty(inGap);
+    const cell = dp.txt[j] === pc ? matchCell(dp, prev, j, s2) : NO_MATCH;
+    dp.C[row + j] = cell.consecutive;
+    inGap = cell.score < s2;
+    const score = Math.max(cell.score, s2, 0);
+    if (isLastRow && score > best.score) {
+      best.score = score;
+      best.pos = j;
+    }
+    dp.H[row + j] = score;
+  }
+}
+
+/** True when the backtrace at (i, j) takes pattern char i as matched at column j. */
+function isMatchStep(dp: DpTable, i: number, j: number, preferMatch: boolean): boolean {
+  const row = i * dp.N;
+  const s = dp.H[row + j];
+  const s1 = i > 0 && j >= dp.F[i] ? dp.H[row - dp.N + j - 1] : 0;
+  const s2 = j > dp.F[i] ? dp.H[row + j - 1] : 0;
+  return s > s1 && (s > s2 || (s === s2 && preferMatch));
+}
+
+function continuesRun(dp: DpTable, row: number, j: number): boolean {
+  const { C, N } = dp;
+  return C[row + j] > 1 || (row + N + j + 1 < C.length && C[row + N + j + 1] > 0);
+}
+
+// Phase 4: backtrace from the best end column to recover the matched positions,
+// preferring to stay inside a consecutive run when two paths score the same.
+function backtrace(dp: DpTable, endPos: number): number[] {
+  const positions: number[] = [];
+  let i = dp.M - 1;
+  let j = endPos;
+  let preferMatch = true;
+  while (j >= 0) {
+    const row = i * dp.N;
+    if (isMatchStep(dp, i, j, preferMatch)) {
+      positions.push(j);
+      if (i === 0) break;
+      i--;
+    }
+    preferMatch = continuesRun(dp, row, j);
+    j--;
+  }
+  positions.reverse();
+  return positions;
+}
+
 /**
  * Score `pattern` as an in-order, case-insensitive subsequence of `text`
  * (fzf FuzzyMatchV2). Returns null when it is not a subsequence at all.
@@ -121,114 +273,28 @@ export function fuzzyMatch(
   const pat = lowerUnits(pattern);
   const txt = lowerUnits(text);
 
-  // Phase 1: F[i] is the first column pattern char i can occupy; lastIdx is the last
-  // occurrence of the final pattern char. Not a subsequence -> bail before any DP.
-  const F = new Int32Array(M);
-  let pidx = 0;
-  let lastIdx = -1;
-  for (let j = 0; j < N; j++) {
-    if (txt[j] === pat[Math.min(pidx, M - 1)]) {
-      if (pidx < M) F[pidx++] = j;
-      lastIdx = j;
-    }
-  }
-  if (pidx < M) return null;
+  const occ = firstOccurrences(txt, pat);
+  if (!occ) return null;
 
   // Full-width rows keep the indexing plain; dashboard names are short.
-  const H = new Int32Array(M * N);
-  const C = new Int32Array(M * N);
-  const B = new Int32Array(N);
+  const dp: DpTable = {
+    txt,
+    pat,
+    M,
+    N,
+    F: occ.F,
+    lastIdx: occ.lastIdx,
+    H: new Int32Array(M * N),
+    C: new Int32Array(M * N),
+    B: new Int32Array(N),
+  };
 
-  // Phase 2: per-column bonuses, and row 0 (the first pattern char, bonus doubled).
-  let maxScore = 0;
-  let maxPos = -1;
-  let prevClass = cfg.initialClass;
-  let inGap = false;
-  let prevH = 0;
-  for (let j = 0; j <= lastIdx; j++) {
-    const cls = charClassOf(text[j], cfg.delimiters);
-    const bonus = bonusFor(prevClass, cls, cfg);
-    B[j] = bonus;
-    prevClass = cls;
-    if (txt[j] === pat[0]) {
-      const score = SCORE_MATCH + bonus * BONUS_FIRST_CHAR_MULTIPLIER;
-      H[j] = score;
-      C[j] = 1;
-      if (M === 1 && score > maxScore) {
-        maxScore = score;
-        maxPos = j;
-        // Nothing later can beat a boundary hit by enough to matter; take the first.
-        if (bonus >= BONUS_BOUNDARY) break;
-      }
-      inGap = false;
-    } else {
-      H[j] = Math.max(prevH + (inGap ? SCORE_GAP_EXTENSION : SCORE_GAP_START), 0);
-      C[j] = 0;
-      inGap = true;
-    }
-    prevH = H[j];
-  }
-  if (M === 1) return { score: maxScore, positions: [maxPos] };
+  const best = scoreFirstRow(dp, text, cfg);
+  if (M === 1) return { score: best.score, positions: [best.pos] };
 
-  // Phase 3: fill the remaining rows. H[row + F[i] - 1] stays 0 as the left edge.
-  for (let i = 1; i < M; i++) {
-    const row = i * N;
-    const prev = row - N;
-    const pc = pat[i];
-    inGap = false;
-    for (let j = F[i]; j <= lastIdx; j++) {
-      const s2: number = H[row + j - 1] + (inGap ? SCORE_GAP_EXTENSION : SCORE_GAP_START);
-      let s1 = 0;
-      let consecutive = 0;
-      if (txt[j] === pc) {
-        s1 = H[prev + j - 1] + SCORE_MATCH;
-        let b = B[j];
-        consecutive = C[prev + j - 1] + 1;
-        if (consecutive > 1) {
-          const fb = B[j - consecutive + 1];
-          // A strong boundary mid-run starts a fresh chunk instead of extending the old one.
-          if (b >= BONUS_BOUNDARY && b > fb) consecutive = 1;
-          else b = Math.max(b, BONUS_CONSECUTIVE, fb);
-        }
-        if (s1 + b < s2) {
-          s1 += B[j];
-          consecutive = 0;
-        } else {
-          s1 += b;
-        }
-      }
-      C[row + j] = consecutive;
-      inGap = s1 < s2;
-      const score = Math.max(s1, s2, 0);
-      if (i === M - 1 && score > maxScore) {
-        maxScore = score;
-        maxPos = j;
-      }
-      H[row + j] = score;
-    }
-  }
+  for (let i = 1; i < M; i++) fillRow(dp, i, best);
 
-  // Phase 4: backtrace from the best end column to recover the matched positions,
-  // preferring to stay inside a consecutive run when two paths score the same.
-  const positions: number[] = [];
-  let i = M - 1;
-  let j = maxPos;
-  let preferMatch = true;
-  while (j >= 0) {
-    const row = i * N;
-    const s = H[row + j];
-    const s1 = i > 0 && j >= F[i] ? H[row - N + j - 1] : 0;
-    const s2 = j > F[i] ? H[row + j - 1] : 0;
-    if (s > s1 && (s > s2 || (s === s2 && preferMatch))) {
-      positions.push(j);
-      if (i === 0) break;
-      i--;
-    }
-    preferMatch = C[row + j] > 1 || (row + N + j + 1 < C.length && C[row + N + j + 1] > 0);
-    j--;
-  }
-  positions.reverse();
-  return { score: maxScore, positions };
+  return { score: best.score, positions: backtrace(dp, best.pos) };
 }
 
 /**

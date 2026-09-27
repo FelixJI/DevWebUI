@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import type { ProjectProposal } from "@/api";
-import { WARNING_BANNER } from "@/lib/severity";
 
 defineProps<{
   dragging: boolean;
@@ -55,13 +54,9 @@ const detectedFramework = computed(() => {
     <TriangleAlert />
     <AlertDescription>{{ error }}</AlertDescription>
   </Alert>
-  <Alert
-    v-else-if="note"
-    class="[&>svg]:text-warning"
-    :class="WARNING_BANNER"
-  >
+  <Alert v-else-if="note" variant="warning">
     <TriangleAlert />
-    <AlertDescription class="text-warning">{{ note }}</AlertDescription>
+    <AlertDescription>{{ note }}</AlertDescription>
   </Alert>
 
   <!-- Detected project — offer to scaffold a .devwebui -->
@@ -81,7 +76,7 @@ const detectedFramework = computed(() => {
     </i18n-t>
     <ul class="mt-2 flex flex-col gap-1.5">
       <li v-for="p in scaffold.proposal.processes" :key="p.id" class="flex items-center gap-2">
-        <span class="size-2 shrink-0 rounded-full" :style="{ background: p.color || '#64748b' }" />
+        <span class="size-2 shrink-0 rounded-full bg-(--dot-color)" :style="{ '--dot-color': p.color || 'var(--process-dot-fallback)' }" />
         <span class="shrink-0 text-foreground">{{ p.name }}</span>
         <code class="truncate text-xs text-muted-foreground">
           <span v-if="p.cwd" class="opacity-70">{{ p.cwd }} › </span>{{ p.command }}
@@ -104,7 +99,7 @@ const detectedFramework = computed(() => {
 
   <!-- Paste a path or git URL -->
   <div class="flex flex-col gap-1.5 text-sm">
-    <Label for="add-path" class="font-normal text-muted-foreground">{{ t("addProject.pasteLabel") }}</Label>
+    <Label for="add-path"><span class="font-normal text-muted-foreground">{{ t("addProject.pasteLabel") }}</span></Label>
     <div class="flex gap-2">
       <Input
         id="add-path"
@@ -123,7 +118,7 @@ const detectedFramework = computed(() => {
 
   <!-- Clone destination — only when the input looks like a git URL -->
   <div v-if="isGitUrl" v-auto-animate class="flex flex-col gap-1.5 text-sm">
-    <Label for="add-dest" class="font-normal text-muted-foreground">{{ t("addProject.cloneInto") }}</Label>
+    <Label for="add-dest"><span class="font-normal text-muted-foreground">{{ t("addProject.cloneInto") }}</span></Label>
     <div class="flex gap-2">
       <Input id="add-dest" v-model="dest" class="flex-1" :placeholder="t('addProject.destPlaceholder')" @update:model-value="emit('clearMessages')" />
       <Button variant="outline" :disabled="busy" @click="emit('pickDest')">

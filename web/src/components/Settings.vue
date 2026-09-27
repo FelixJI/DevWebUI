@@ -277,7 +277,7 @@ async function save() {
               type="number"
               min="0"
               max="90"
-              class="w-20 text-sm"
+              class="w-20"
               :model-value="updateCooldownDays"
               @update:model-value="(v) => (updateCooldownDays = v === '' || v == null ? 0 : Number(v))"
             />
@@ -340,11 +340,11 @@ async function save() {
         </SettingsRow>
         <div class="px-3.5 py-2.5">
           <div class="mb-1.5 flex items-center gap-1.5">
-            <ExternalLink class="size-[18px] shrink-0 text-muted-foreground" />
-            <Label for="sd-link-host" class="text-sm font-normal">{{ t("settings.linkHost") }}</Label>
+            <ExternalLink class="size-4.5 shrink-0 text-muted-foreground" />
+            <Label for="sd-link-host"><span class="text-sm font-normal">{{ t("settings.linkHost") }}</span></Label>
             <InfoHint><span v-html="t('settings.linkHostHelp')" /></InfoHint>
           </div>
-          <Input id="sd-link-host" v-model="linkHost" class="font-mono text-sm" :placeholder="t('settings.linkHostPlaceholder')" />
+          <Input id="sd-link-host" v-model="linkHost" variant="mono" :placeholder="t('settings.linkHostPlaceholder')" />
         </div>
       </SettingsGroup>
       <!-- Project scanning (folded in from the old Projects tab) -->
@@ -355,7 +355,7 @@ async function save() {
         </SettingsRow>
         <div class="px-3.5 py-2.5">
           <div class="mb-2 flex items-center gap-1.5">
-            <FolderX class="size-[18px] shrink-0 text-muted-foreground" />
+            <FolderX class="size-4.5 shrink-0 text-muted-foreground" />
             <span class="text-sm">{{ t("settings.skipSystem") }}</span>
             <InfoHint>{{ t("settings.skipSystemHelp") }}</InfoHint>
           </div>
@@ -373,15 +373,16 @@ async function save() {
         </div>
         <div class="px-3.5 py-2.5">
           <div class="mb-1.5 flex items-center gap-1.5">
-            <FilterX class="size-[18px] shrink-0 text-muted-foreground" />
-            <Label for="sd-exclude" class="text-sm font-normal">{{ t("settings.alsoExclude") }}</Label>
+            <FilterX class="size-4.5 shrink-0 text-muted-foreground" />
+            <Label for="sd-exclude"><span class="text-sm font-normal">{{ t("settings.alsoExclude") }}</span></Label>
             <InfoHint><span v-html="t('settings.alsoExcludeHelp')" /></InfoHint>
           </div>
           <Textarea
             id="sd-exclude"
             v-model="excludeText"
             rows="3"
-            class="font-mono text-xs"
+            variant="mono"
+            text-size="xs"
             :placeholder="t('settings.excludePlaceholder')"
           />
         </div>

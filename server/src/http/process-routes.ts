@@ -123,7 +123,7 @@ async function handleProjectAction(c: Context, manager: Manager) {
   // route returns, instead of Hono's bare text/plain 500 — the CLI and MCP surface the
   // message verbatim, so a raw 500 loses the only diagnostic the caller ever sees.
   return guard(c, async () => {
-    const run = PROJECT_ACTIONS[action];
+    const run = Object.hasOwn(PROJECT_ACTIONS, action) ? PROJECT_ACTIONS[action] : undefined;
     if (!run) return fail(c, "unknown action");
     await run(manager, id, proj);
     return c.json({ ok: true });
@@ -204,7 +204,7 @@ async function handleProcessAction(c: Context, manager: Manager) {
   if (!manager.view(id)) return fail(c, "unknown process", 404);
   // guard(): see the note on projectAction above — same reason, same shape.
   return guard(c, async () => {
-    const run = PROCESS_ACTIONS[action];
+    const run = Object.hasOwn(PROCESS_ACTIONS, action) ? PROCESS_ACTIONS[action] : undefined;
     if (!run) return fail(c, "unknown action");
     const result = (await run(manager, id)) ?? {};
     return c.json({

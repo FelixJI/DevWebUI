@@ -63,3 +63,32 @@
     U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
+/* ---------------------------------------------------------------------------
+   App tokens.
+   --------------------------------------------------------------------------- */
+:root {
+  /* Dot colour for a detected (not yet added) process that declares no `color` (slate-500). */
+  --process-dot-fallback: #64748b;
+}
+
+/* ---------------------------------------------------------------------------
+   Component styles.
+   --------------------------------------------------------------------------- */
+
+/* AppShell: slide the page aside as a push panel opens: --panel-shift (the panel's width)
+   feeds padding-inline-end, and this eases the padding change. */
+.panel-shift {
+  transition: padding 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ProcessForm: advanced options open/close: the grid-rows 0fr <-> 1fr trick eases the
+   section to its natural height with no JS measurement. */
+.advanced-reveal {
+  transition: grid-template-rows 300ms cubic-bezier(0, 0, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .advanced-reveal {
+    transition: none;
+  }
+}
+

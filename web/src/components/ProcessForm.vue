@@ -217,7 +217,7 @@ async function remove() {
 
 <template>
   <Dialog :open="open" @update:open="(v: boolean) => { if (!saving) open = v }">
-    <DialogContent class="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[480px]" :aria-busy="saving">
+    <DialogContent class="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-120" :aria-busy="saving">
       <DialogHeader>
         <DialogTitle>{{ mode === "add" ? t("processForm.addProcess") : t("processForm.editProcess") }}</DialogTitle>
         <DialogDescription class="sr-only">{{ t("processForm.dialogDescription") }}</DialogDescription>
@@ -236,16 +236,16 @@ async function remove() {
           <div class="grid grid-cols-[1.5fr_1fr] gap-x-3.5 px-3.5 py-2.5 max-[440px]:grid-cols-1 max-[440px]:gap-y-3">
             <div>
               <div class="mb-1.5 flex items-center gap-1.5">
-                <Tag class="size-[18px] shrink-0 text-muted-foreground" />
-                <Label for="pf-name" class="text-sm font-normal">{{ t("processForm.labelName") }}</Label>
+                <Tag class="size-4.5 shrink-0 text-muted-foreground" />
+                <Label for="pf-name"><span class="text-sm font-normal">{{ t("processForm.labelName") }}</span></Label>
                 <InfoHint>{{ t("processForm.nameHint") }}</InfoHint>
               </div>
               <Input id="pf-name" v-model="form.name" :placeholder="t('processForm.placeholderName')" />
             </div>
             <div>
               <div class="mb-1.5 flex items-center gap-1.5">
-                <Hash class="size-[18px] shrink-0 text-muted-foreground" />
-                <Label for="pf-id" class="text-sm font-normal">{{ t("processForm.labelId") }}</Label>
+                <Hash class="size-4.5 shrink-0 text-muted-foreground" />
+                <Label for="pf-id"><span class="text-sm font-normal">{{ t("processForm.labelId") }}</span></Label>
                 <InfoHint>{{ t("processForm.idHint") }}</InfoHint>
               </div>
               <Input
@@ -291,15 +291,15 @@ async function remove() {
             <template #control>
               <DropdownMenu>
                 <DropdownMenuTrigger as-child>
-                  <Button type="button" variant="outline" size="lg" class="gap-1.5">
+                  <Button type="button" variant="outline" size="lg">
                     {{ form.links.length ? t("processForm.linksCount", { count: form.links.length }) : t("processForm.linksNone") }}
-                    <ChevronDown class="size-3.5 opacity-60" />
+                    <ChevronDown class="ms-0.5 size-3.5 opacity-60" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" class="max-w-56">
                   <!-- Quick All / None with a live count, so a long candidate list isn't ticked one by one. -->
                   <div class="flex items-center justify-between gap-2 px-2 py-1">
-                    <span class="text-[11px] tabular-nums text-muted-foreground">{{ form.links.length }}/{{ linkCandidates.length }}</span>
+                    <span class="text-2xs tabular-nums text-muted-foreground">{{ form.links.length }}/{{ linkCandidates.length }}</span>
                     <div class="flex items-center gap-0.5 text-xs">
                       <button
                         type="button"
@@ -330,8 +330,8 @@ async function remove() {
                   >
                     <span class="flex min-w-0 items-center gap-2">
                       <span
-                        class="size-2.5 shrink-0 rounded-full"
-                        :style="{ backgroundColor: p.color || 'var(--primary)' }"
+                        class="size-2.5 shrink-0 rounded-full bg-(--swatch)"
+                        :style="{ '--swatch': p.color || 'var(--primary)' }"
                       />
                       <span class="truncate">{{ p.name }}</span>
                     </span>
@@ -357,7 +357,7 @@ async function remove() {
           </button>
 
           <div
-            class="grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none"
+            class="advanced-reveal grid"
             :class="advancedOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'"
           >
             <div class="min-h-0 overflow-hidden">
@@ -368,8 +368,8 @@ async function remove() {
                 <SettingsGroup>
                   <div class="px-3.5 py-2.5">
                     <div class="mb-1.5 flex items-center gap-1.5">
-                      <FolderOpen class="size-[18px] shrink-0 text-muted-foreground" />
-                      <Label for="pf-cwd" class="text-sm font-normal">{{ t("processForm.labelCwd") }}</Label>
+                      <FolderOpen class="size-4.5 shrink-0 text-muted-foreground" />
+                      <Label for="pf-cwd"><span class="text-sm font-normal">{{ t("processForm.labelCwd") }}</span></Label>
                       <InfoHint>{{ t("processForm.cwdHint") }}</InfoHint>
                     </div>
                     <Input id="pf-cwd" v-model="form.cwd" :placeholder="t('processForm.placeholderCwd')" />
@@ -379,8 +379,8 @@ async function remove() {
                   <div class="grid grid-cols-2 gap-x-3.5 px-3.5 py-2.5 max-[440px]:grid-cols-1 max-[440px]:gap-y-3">
                     <div>
                       <div class="mb-1.5 flex items-center gap-1.5">
-                        <Network class="size-[18px] shrink-0 text-muted-foreground" />
-                        <Label for="pf-port" class="text-sm font-normal">{{ t("processForm.labelPort") }}</Label>
+                        <Network class="size-4.5 shrink-0 text-muted-foreground" />
+                        <Label for="pf-port"><span class="text-sm font-normal">{{ t("processForm.labelPort") }}</span></Label>
                         <InfoHint>{{ t("processForm.portHint") }}</InfoHint>
                       </div>
                       <Input
@@ -394,8 +394,8 @@ async function remove() {
                     </div>
                     <div>
                       <div class="mb-1.5 flex items-center gap-1.5">
-                        <Timer class="size-[18px] shrink-0 text-muted-foreground" />
-                        <Label for="pf-wait-for-port" class="text-sm font-normal">{{ t("processForm.labelWaitForPort") }}</Label>
+                        <Timer class="size-4.5 shrink-0 text-muted-foreground" />
+                        <Label for="pf-wait-for-port"><span class="text-sm font-normal">{{ t("processForm.labelWaitForPort") }}</span></Label>
                         <InfoHint>{{ t("processForm.waitForPortHint") }}</InfoHint>
                       </div>
                       <Input
@@ -408,8 +408,8 @@ async function remove() {
 
                   <div class="px-3.5 py-2.5">
                     <div class="mb-1.5 flex items-center gap-1.5">
-                      <ExternalLink class="size-[18px] shrink-0 text-muted-foreground" />
-                      <Label for="pf-url" class="text-sm font-normal">{{ t("processForm.labelUrl") }}</Label>
+                      <ExternalLink class="size-4.5 shrink-0 text-muted-foreground" />
+                      <Label for="pf-url"><span class="text-sm font-normal">{{ t("processForm.labelUrl") }}</span></Label>
                       <InfoHint>{{ t("processForm.urlHint") }}</InfoHint>
                     </div>
                     <Input id="pf-url" v-model="form.url" :placeholder="t('processForm.placeholderUrl')" />
@@ -419,8 +419,8 @@ async function remove() {
                     <template #info><InfoHint>{{ t("processForm.colorHint") }}</InfoHint></template>
                     <template #control>
                       <label
-                        class="relative block size-7 cursor-pointer overflow-hidden rounded-md border border-border"
-                        :style="{ backgroundColor: form.color || 'var(--primary)' }"
+                        class="relative block size-7 cursor-pointer overflow-hidden rounded-md border border-border bg-(--swatch)"
+                        :style="{ '--swatch': form.color || 'var(--primary)' }"
                         :title="form.color || t('processForm.titlePickColor')"
                       >
                         <input
@@ -452,8 +452,8 @@ async function remove() {
 
                   <div class="px-3.5 py-2.5">
                     <div class="mb-1.5 flex items-center gap-1.5">
-                      <SquareTerminal class="size-[18px] shrink-0 text-muted-foreground" />
-                      <Label for="pf-cmd" class="text-sm font-normal">{{ t("processForm.labelCommand") }}</Label>
+                      <SquareTerminal class="size-4.5 shrink-0 text-muted-foreground" />
+                      <Label for="pf-cmd"><span class="text-sm font-normal">{{ t("processForm.labelCommand") }}</span></Label>
                       <InfoHint>{{ t("processForm.commandHint") }}</InfoHint>
                     </div>
                     <Input id="pf-cmd" v-model="form.command" :placeholder="t('processForm.placeholderCommand')" />

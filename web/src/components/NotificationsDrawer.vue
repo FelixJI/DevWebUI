@@ -21,7 +21,7 @@ import IconButton from "./IconButton.vue";
 import { storeToRefs } from "pinia";
 import { useAppStore } from "@/store";
 import { formatAgo, formatAgoCoarse } from "@/lib/format";
-import { sourcePill } from "@/lib/severity";
+import { sourceBadgeVariant } from "@/lib/severity";
 import type { AppNotification, ErrorEvent } from "@/types";
 import { openInEditor } from "@/api";
 import { findSourceFrames, type SourceFrame } from "../../../shared/source-frames";
@@ -338,7 +338,7 @@ function notifTitle(n: AppNotification) {
                 class="flex min-w-0 items-center gap-2 rounded-md bg-muted/40 px-2 py-1"
               >
                 <FolderOpen class="size-3.5 shrink-0 text-primary" />
-                <span class="shrink-0 rounded bg-primary/10 px-1 py-0.5 text-[10px] font-medium uppercase text-primary">
+                <span class="shrink-0 rounded bg-primary/10 px-1 py-0.5 text-3xs font-medium uppercase text-primary">
                   {{ t("scanResults.configuredBadge") }}
                 </span>
                 <span class="shrink-0 text-xs tabular-nums text-muted-foreground">{{ t("scanResults.procCount", { count: f.processes }) }}</span>
@@ -350,7 +350,7 @@ function notifTitle(n: AppNotification) {
                 class="flex min-w-0 items-center gap-2 rounded-md bg-muted/40 px-2 py-1"
               >
                 <Sparkles class="size-3.5 shrink-0 text-primary" />
-                <span class="shrink-0 rounded bg-primary/10 px-1 py-0.5 text-[10px] font-medium uppercase text-primary">
+                <span class="shrink-0 rounded bg-primary/10 px-1 py-0.5 text-3xs font-medium uppercase text-primary">
                   {{ t("scanResults.detectedBadge") }}
                 </span>
                 <span v-if="p.framework" class="shrink-0 text-xs text-muted-foreground">{{ p.framework }}</span>
@@ -407,7 +407,7 @@ function notifTitle(n: AppNotification) {
             class="rounded-lg border border-border bg-card p-3"
           >
             <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <Badge variant="outline" class="capitalize" :class="sourcePill(e.source)">{{ e.source }}</Badge>
+              <Badge :variant="sourceBadgeVariant(e.source)"><span class="capitalize">{{ e.source }}</span></Badge>
               <span class="ms-auto flex items-center gap-2">
                 <span class="rounded bg-muted px-1.5 py-0.5 font-semibold tabular-nums text-foreground">
                   ×{{ e.count }}
