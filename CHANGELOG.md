@@ -6,6 +6,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-27
+
 ### Added
 
 - **`get_runtime_services` MCP tool (and `GET /api/runtime-services`).** Returns a paste-ready
@@ -792,7 +794,8 @@ First public, open-source release.
   `zod` is intentionally held at 3.x - `@modelcontextprotocol/sdk` is not yet
   zod-4 compatible, so bumping it would break the MCP server.
 
-[Unreleased]: https://github.com/LunarWerxs/devwebui/compare/v0.8.8...HEAD
+[Unreleased]: https://github.com/LunarWerxs/devwebui/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/LunarWerxs/devwebui/compare/v1.0.0...v1.1.0
 [0.8.8]: https://github.com/LunarWerxs/devwebui/compare/v0.8.7...v0.8.8
 [0.8.3]: https://github.com/LunarWerxs/devwebui/compare/v0.8.2...v0.8.3
 [0.8.2]: https://github.com/LunarWerxs/devwebui/compare/v0.8.1...v0.8.2
