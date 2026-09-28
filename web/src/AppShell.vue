@@ -275,6 +275,6 @@ onMounted(async () => {
       @review="reviewNotification"
     />
 
-    <AppFooter discord="https://discord.gg/ppCnpEh9fa" />
+    <AppFooter discord="https://lunarwerx.com/discord/devwebui" />
   </div>
 </template>
