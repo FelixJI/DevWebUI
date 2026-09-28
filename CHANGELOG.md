@@ -6,6 +6,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **The Discord link now opens DevWebUI's own channel and gives you the DevWebUI role** on joining,
+  instead of dropping you in the server's general room to find it yourself.
+
 ## [1.1.0] - 2026-09-27
 
 ### Added
