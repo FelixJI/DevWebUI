@@ -1,9 +1,19 @@
 name: CI
 
+# rust-ci-speed: ci not applied: misc/tray-host-native is the LunarWerx kit's tray host, synced from
+# lunarwerx-ui, which builds and tests it (.github/workflows/tray-host.yml); this copy is not built here.
+
 on:
   push:
     branches: [main]
+    # A docs-only change cannot break the gate. No branch protection requires this workflow's checks.
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
 
   # Manual runs, so a commit can be verified without a dummy push. Added 2026-08-06 during a
   # GitHub Actions incident whose recovery plan was to throttle webhook triggers: pushes landed on
@@ -16,11 +26,48 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # A commit already green on this workflow (a manual run on a ci/ branch before landing) is not
+  # gated again on its push to main. Push only: a dispatch or a PR always runs the gate. Fails open:
+  # if the API call errors, this job fails and `ci` still runs.
+  already:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      verified: ${{ steps.check.outputs.verified }}
+    steps:
+      - name: Has this workflow already passed on this exact commit?
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          wf="${GITHUB_WORKFLOW_REF%%@*}"; wf="${wf##*/}"
+          earlier="$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/$wf/runs?head_sha=$GITHUB_SHA&status=success&per_page=10" \
+            | python3 -c 'import json,sys,os; me=int(os.environ["GITHUB_RUN_ID"]); print(next((r["html_url"] for r in json.load(sys.stdin).get("workflow_runs", []) if int(r["id"]) != me), ""))')" || earlier=""  # fail open: an API error means the gate runs
+          if [ -n "$earlier" ]; then
+            echo "::notice::$GITHUB_SHA already passed this workflow: $earlier. The gate is skipped."
+            echo "verified=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "no earlier green run of this workflow on $GITHUB_SHA: the gate runs."
+            echo "verified=0" >> "$GITHUB_OUTPUT"
+          fi
+
   ci:
+    needs: already
+    # `already` is skipped off push, and may fail: the gate runs then (empty output != '1').
+    if: ${{ !cancelled() && needs.already.outputs.verified != '1' }}
     timeout-minutes: 60
     name: lint · typecheck · build · test (${{ matrix.os }})
     # The shipped artifact is a per-OS `bun --compile` binary (see scripts/build.ts /
     # release.yml), so run the full suite on all three rather than just Linux.
+    #
+    # rust-ci-speed: windows-per-change not applied: this workflow builds no Rust; the Windows leg is the only
+    # place the daemon's Windows-only paths (bun:ffi metrics, the tray -SelfTest) and the Windows binary run,
+    # it costs about 2 min, and there is no separate Linux lint/clippy/docs job to move it under.
     strategy:
       fail-fast: false
       matrix:
