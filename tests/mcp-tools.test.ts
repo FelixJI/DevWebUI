@@ -109,10 +109,10 @@ const cases: Case[] = [
   },
   {
     name: "scan_projects",
-    args: { roots: ["C:/"], preset: "quick" },
+    args: { roots: ["C:/projects"] },
     method: "POST",
     url: "/api/projects/scan",
-    body: { roots: ["C:/"], preset: "quick" },
+    body: { roots: ["C:/projects"], preset: "scoped" },
   },
   {
     name: "remove_project",

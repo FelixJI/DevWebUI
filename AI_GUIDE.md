@@ -181,7 +181,7 @@ agents share one state. Register it as shown in the README's
 - `list_projects` - loaded projects (codebases), each with its processes and live status.
 - `load_project` - load a `.devwebui` file by **absolute path** (registers its processes, remembers it).
 - `clone_project` - clone a git repo into a dest path, then load it (or report it needs scaffolding).
-- `scan_projects` - sweep the machine for existing `.devwebui` files (and detectable dev folders); loads nothing.
+- `scan_projects` - scan the EXACT folders you pass in `roots` (required; recursive, bounded) for existing `.devwebui` files and detectable dev folders; loads nothing. No machine-wide sweep exists in this build.
 - `update_project` - rename and/or recolor a project (rewrites its `.devwebui` file); processes untouched.
 - `remove_project` - unload a project by id (stops its processes and forgets it).
 - `start_project` / `stop_project` - start/stop every process in a project **now** (transient; doesn't change saved on/off).
@@ -271,6 +271,6 @@ first.
   most recent first; clear it all or for one process.
 
 **Common flows:** to onboard a repo, write its `.devwebui` file (above) then `load_project` with the
-absolute path - or `scan_projects` to find existing ones. Build or reshape a project with
+absolute path - or `scan_projects` (with explicit folder paths) to find existing ones under a folder you name. Build or reshape a project with
 `add_process` / `update_process` / `update_project`. To diagnose breakage, `list_errors` then
 `diagnose_process`; `open_in_editor` on a frame puts the developer on the failing line. For a page that renders wrong while the server logs look clean, `get_browser_errors`. To hand a repo fully over to DevWebUI, `take_over_autostart` on its folder.

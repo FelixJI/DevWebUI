@@ -109,6 +109,14 @@ test("concurrent package detection never races past the result limit", async () 
   });
 });
 
+test("a scan without explicit roots is refused (no machine-wide default)", async () => {
+  // This fork removed every implicit sweep: no home dir, no all-drives walk. A caller
+  // that names no folder gets an error, not a guess.
+  expect(scanForDevWebUI()).rejects.toThrow(/explicit roots/i);
+  expect(scanForDevWebUI({ roots: [] })).rejects.toThrow(/explicit roots/i);
+  expect(scanForDevWebUI({ preset: "scoped" })).rejects.toThrow(/explicit roots/i);
+});
+
 test("one aborted caller does not cancel an identical caller's scan", async () => {
   await withTempDir(async (dir) => {
     const app = path.join(dir, "shared-app");

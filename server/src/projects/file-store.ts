@@ -363,10 +363,9 @@ export function registryRemove(filePath: string): void {
 
 // ---------------------------------------------------------------------------
 // Ignore list — detected (not-yet-added) project folders the user dismissed, so
-// the background scan stops surfacing them. Keyed by absolute directory path,
-// the same space as the registry. Deliberately its OWN file, NOT `scanExclude`:
-// the scan still walks into these folders, so the "show ignored" toggle can
-// reveal them and un-ignoring is instant.
+// later folder scans stop surfacing them. Keyed by absolute directory path, the
+// same space as the registry. The scan still walks into these folders, so the
+// "show ignored" toggle can reveal them and un-ignoring is instant.
 // ---------------------------------------------------------------------------
 const ignoredFile = (): string => path.join(dataDir(), "ignored.json");
 

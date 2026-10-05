@@ -2,7 +2,7 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { toast } from "vue-sonner";
-import { Eye, EyeOff, FolderSearch, Search } from "@lucide/vue";
+import { FolderSearch } from "@lucide/vue";
 import {
   Dialog,
   DialogContent,
@@ -30,10 +30,6 @@ import { useAppStore } from "@/store";
 import { findProjectNameInDir, pathFromDrop, projectNameFromFile } from "@/lib/drop";
 
 const open = defineModel<boolean>("open", { required: true });
-const props = defineProps<{
-  scanOnOpen?: boolean; // run a whole-machine scan as soon as the dialog opens
-  prefillScan?: ScanResult | null; // show these scan results without re-scanning
-}>();
 
 const store = useAppStore();
 const { t } = useI18n({ useScope: "global" });
@@ -50,23 +46,16 @@ const scaffold = ref<{ dir: string; fileName: string; proposal: ProjectProposal 
 const takeover = ref<{ dir: string; triggers: AutostartTrigger[]; result?: TakeOverResult } | null>(
   null,
 );
-// Machine-scan results (existing .devwebui files + detectable package-script projects).
+// Folder-scan results (existing .devwebui files + detectable package-script projects),
+// for ONE folder the user explicitly named — there is no machine-wide scan in this build.
 const scanning = ref(false);
-const scanDeepening = ref(false); // tier-1 results shown; tier-2 deep sweep still running
 const scanResult = ref<ScanResult | null>(null);
 let scanGen = 0; // bumped on reset/new-scan so a stale in-flight scan can't write back
-// Explicit "scan a specific folder" card — separate from the paste-a-path field so
-// scoping a scan to one folder doesn't depend on the user knowing that trick.
-const scanFolder = ref("");
-// The folder the most recent scoped scan actually ran against (from either the
-// dedicated card above or a path typed into the paste field) — shown as a caption
-// over the results so it's obvious the scan didn't sweep the whole machine.
+// The folder the most recent scoped scan actually ran against, shown as a caption
+// over the results so it's obvious what was searched.
 const scannedFolder = ref("");
-// Opened as a focused "Scan for projects" view (⋮ menu or launch auto-scan) —
-// show only the results, hiding the drop zone / paste / clone form.
-const scanMode = ref(false);
-// Reveal the folders the user dismissed (so they can un-ignore them).
-const showIgnored = ref(false);
+// The "scan a specific folder" card's input (a typed/pasted path).
+const scanFolder = ref("");
 async function ignoreDetected(dir: string) {
   try {
     await store.ignoreProject(dir);
@@ -104,17 +93,11 @@ watch(open, async (v) => {
   takeover.value = null;
   scanResult.value = null;
   scanning.value = false;
-  scanDeepening.value = false;
-  scanFolder.value = "";
   scannedFolder.value = "";
+  scanFolder.value = "";
   scanGen++; // invalidate any scan still running from a previous open
   dragDepth.value = 0;
   busy.value = false;
-  // Either entry into the scan flow opens the focused results-only view.
-  scanMode.value = !!(props.scanOnOpen || props.prefillScan);
-  // Opened to show scan results (auto-scan), or to kick off a fresh whole-machine scan.
-  if (props.prefillScan) scanResult.value = props.prefillScan;
-  else if (props.scanOnOpen) void runScan();
   const suggested = await suggestDest();
   if (open.value && !dest.value) dest.value = suggested; // don't clobber a closed dialog or typed value
 });
@@ -128,17 +111,10 @@ function clearMessages() {
   scannedFolder.value = "";
 }
 
-// Leave the focused scan view for the full add form (e.g. scan found nothing).
-function addManually() {
-  clearMessages(); // drop the empty scan result so the manual form opens clean
-  scanMode.value = false;
-}
-
 function finish(res: AddResult) {
   if (res.cancelled) return;
   if (res.needsScaffold && res.proposal && res.dir && res.fileName) {
     // No .devwebui here, but we detected dev scripts — offer to build one.
-    scanMode.value = false;
     scaffold.value = { dir: res.dir, fileName: res.fileName, proposal: res.proposal };
     return;
   }
@@ -188,73 +164,35 @@ async function createScaffold() {
   if (res) finish(res);
 }
 
-// ---- scan for configured/detectable projects ----------------------------
-// If the field holds an ABSOLUTE path, scope the scan to it (fast); otherwise
-// (empty, partial, or junk input) sweep the whole machine, bounded by the daemon.
-const ABS_PATH_RE = /^([a-zA-Z]:[\\/]|\/|\\\\)/;
-const scanRoot = computed(() => {
-  const t = input.value.trim();
-  return !isGitUrl.value && ABS_PATH_RE.test(t) ? t : "";
-});
-// Tooltip for the footer Scan button — narrows to the typed folder when one is present.
-const scanHint = computed(() =>
-  scanRoot.value
-    ? t("addProject.scanHintRoot", { root: scanRoot.value })
-    : t("addProject.scanHintMachine"),
-);
-
-// `explicitRoot` comes from the dedicated "scan a specific folder" card (a typed
-// path or the native picker); omit it to fall back to the paste field's implicit
-// scoping (an absolute path typed there) or a whole-machine sweep.
-async function runScan(explicitRoot?: string) {
-  if (scanning.value) return;
+// ---- scan ONE explicitly named folder ------------------------------------
+// The ONLY scan this build offers: the folder from the dedicated card (typed or
+// picked). One thorough, bounded pass of that folder — never the whole machine.
+async function runScan(explicitRoot: string) {
+  if (scanning.value || !explicitRoot) return;
   clearMessages();
   scanning.value = true;
-  scanDeepening.value = false;
   const gen = ++scanGen; // invalidate this run if the dialog is reset/reopened meanwhile
-  const forRoot = explicitRoot ?? scanRoot.value;
-  // For an explicit root the caller (not the paste field) owns the scope, so gen alone
-  // is enough to detect staleness; for the implicit path, also bail if the field changed.
-  const live = () => gen === scanGen && (explicitRoot !== undefined || scanRoot.value === forRoot);
   try {
-    if (forRoot) {
-      // Scoped to a folder — one thorough pass (it's small, so it's fast anyway).
-      scannedFolder.value = forRoot;
-      const r = await scanForDevWebUI({
-        roots: [forRoot],
-        preset: "scoped",
-        detectPackages: true,
-      });
-      if (live()) scanResult.value = r;
-      return;
-    }
-    // Whole machine, tiered: shallow+fast first (the likely projects), then deep for outliers.
-    const tier1 = await scanForDevWebUI({ preset: "quick", detectPackages: true });
-    if (!live()) return; // user typed a path, or the dialog was reset
-    scanResult.value = tier1;
-    scanDeepening.value = true;
-    const tier2 = await scanForDevWebUI({ preset: "deep", detectPackages: true });
-    if (live()) scanResult.value = tier2; // tier-2 is a superset — replace
+    scannedFolder.value = explicitRoot;
+    const r = await scanForDevWebUI({
+      roots: [explicitRoot],
+      preset: "scoped",
+      detectPackages: true,
+    });
+    if (gen === scanGen) scanResult.value = r;
   } catch {
     if (gen === scanGen) error.value = t("addProject.scanFailed");
   } finally {
-    if (gen === scanGen) {
-      scanning.value = false;
-      scanDeepening.value = false;
-    }
+    if (gen === scanGen) scanning.value = false;
   }
 }
 
-// Native folder picker, scoped straight into a scan — the discoverable alternative
-// to knowing that pasting an absolute path above also narrows the scan.
+// Native folder picker, scoped straight into a scan.
 async function browseScanFolder() {
   if (busy.value || scanning.value) return;
   try {
     const r = await browseForFolder();
-    if (r.ok && r.path) {
-      scanFolder.value = r.path;
-      void runScan(r.path);
-    }
+    if (r.ok && r.path) void runScan(r.path);
   } catch {
     error.value = t("addProject.errPicker");
   }
@@ -394,16 +332,10 @@ function promptForLocation(
       <div class="flex min-w-0 flex-col">
       <DialogHeader class="mb-4">
         <DialogTitle>
-          {{ takeover ? t("addProject.titleTakeover") : scanMode ? t("addProject.titleScan") : t("addProject.titleAdd") }}
+          {{ takeover ? t("addProject.titleTakeover") : t("addProject.titleAdd") }}
         </DialogTitle>
         <DialogDescription>
-          {{
-            takeover
-              ? t("addProject.descTakeover")
-              : scanMode
-                ? t("addProject.descScan")
-                : t("addProject.descAdd")
-          }}
+          {{ takeover ? t("addProject.descTakeover") : t("addProject.descAdd") }}
         </DialogDescription>
       </DialogHeader>
       <span aria-live="polite" class="sr-only">{{ busy ? t("addProject.working") : "" }}</span>
@@ -418,7 +350,7 @@ function promptForLocation(
       />
 
       <div
-        v-else-if="!scanMode"
+        v-else
         class="flex min-w-0 flex-col gap-4"
         @dragover.prevent
         @dragenter.prevent="dragDepth++"
@@ -441,17 +373,14 @@ function promptForLocation(
           @create-scaffold="createScaffold"
         />
 
-        <!-- Scan a specific folder, and its results -->
+        <!-- Scan ONE specific folder (explicit only — no machine-wide scan), and its results -->
         <ScanResultsPanel
-          :focused="false"
           v-model:scan-folder="scanFolder"
           :busy="busy"
           :scanning="scanning"
           :scanned-folder="scannedFolder"
           :scan-result="scanResult"
-          :scan-deepening="scanDeepening"
           :ignored-paths="store.ignoredProjects"
-          :show-ignored="showIgnored"
           @browse-scan-folder="browseScanFolder"
           @scan-typed-folder="scanTypedFolder"
           @select="addFound"
@@ -460,55 +389,13 @@ function promptForLocation(
         />
       </div>
 
-      <!-- Focused scan view — only the results, opened from the ⋮ menu or launch auto-scan -->
-      <ScanResultsPanel
-        v-else
-        :focused="true"
-        v-model:scan-folder="scanFolder"
-        :error="error"
-        :scanning="scanning"
-        :scan-result="scanResult"
-        :scan-deepening="scanDeepening"
-        :busy="busy"
-        :ignored-paths="store.ignoredProjects"
-        :show-ignored="showIgnored"
-        @select="addFound"
-        @ignore="ignoreDetected"
-        @unignore="unignoreDetected"
-        @add-manually="addManually"
-      />
-
       <!-- No explicit Close button: the corner ✕ and click-outside both dismiss. -->
       <DialogFooter v-if="!takeover" class="mt-4 sm:justify-start">
-        <!-- Focused scan view: a single rescan button. -->
-        <Button v-if="scanMode" variant="ghost" :disabled="scanning || busy" @click="runScan">
-          <Search class="size-4" :class="scanning ? 'animate-pulse text-primary' : ''" />
-          {{ scanning ? t("addProject.scanning") : t("addProject.scanAgain") }}
-        </Button>
-        <Button
-          v-if="scanMode && store.ignoredProjects.length"
-          variant="ghost"
-          :disabled="busy"
-          @click="showIgnored = !showIgnored"
-        >
-          <Eye v-if="showIgnored" class="size-4" />
-          <EyeOff v-else class="size-4" />
-          {{ t("addProject.showIgnored") }}
-        </Button>
-        <!-- Normal add view: Scan + Browse side by side, each with a hint. -->
-        <div v-else class="flex items-center gap-2">
-          <Hint :label="scanHint" side="top">
-            <Button variant="ghost" :disabled="scanning || busy" @click="runScan">
-              <Search class="size-4" :class="scanning ? 'animate-pulse text-primary' : ''" />
-              {{ scanning ? t("addProject.scanning") : t("addProject.scan") }}
-            </Button>
-          </Hint>
-          <Hint :label="t('addProject.browseHint')" side="top">
-            <Button variant="ghost" :disabled="busy" @click="browseFile">
-              <FolderSearch class="size-4" /> {{ t("addProject.browseFile") }}
-            </Button>
-          </Hint>
-        </div>
+        <Hint :label="t('addProject.browseHint')" side="top">
+          <Button variant="ghost" :disabled="busy" @click="browseFile">
+            <FolderSearch class="size-4" /> {{ t("addProject.browseFile") }}
+          </Button>
+        </Hint>
       </DialogFooter>
       </div>
     </DialogContent>

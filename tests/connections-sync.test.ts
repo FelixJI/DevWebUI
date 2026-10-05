@@ -225,7 +225,6 @@ beforeEach(async () => {
     runtime: "auto",
     freePortOnStart: true,
     monitorResources: true,
-    autoScan: true,
     autoStartOnLaunch: false,
     portableMode: false,
     hideTrayIcon: false,
@@ -317,15 +316,6 @@ describe("pushNow / pullNow", () => {
       runtime: "bun",
       freePortOnStart: false,
       monitorResources: false,
-      autoScan: false,
-      skipWindows: false,
-      skipMac: false,
-      skipLinux: false,
-      // Lower-case on purpose: `writeSettings` normalizes osSkip entries for case-insensitive
-      // path matching, so an upper-case literal here would fail on the normalization, not on
-      // anything to do with syncing.
-      osSkip: { windows: ["c:/nope"], mac: ["/system"], linux: ["/proc"] },
-      scanExclude: ["node_modules", "D:/Archive"],
       updateNotify: false,
       autoUpdateIntervalSecs: 43_200,
       updateCooldownDays: 7,
@@ -337,7 +327,6 @@ describe("pushNow / pullNow", () => {
       linkHost: "definitely-machine-local.example", // deliberately excluded from PREF_KEYS
       autoStartOnLaunch: true, // deliberately excluded from PREF_KEYS
       autoUpdate: true, // unattended: excluded from PREF_KEYS
-      firstScanDone: true, // per-machine latch: excluded from PREF_KEYS
     });
 
     await pushNow();
@@ -348,7 +337,6 @@ describe("pushNow / pullNow", () => {
     expect(raw).not.toContain("machine-local");
     expect(raw).not.toContain("autoStartOnLaunch");
     expect(raw).not.toContain('autoUpdate"');
-    expect(raw).not.toContain("firstScanDone");
   });
 
   test("pushNow includes the locally-held appearance blob alongside prefs", async () => {
@@ -428,7 +416,7 @@ describe("pushNow / pullNow", () => {
 describe("enable() connected branches", () => {
   test("enable() with an empty remote doc seeds the store from local settings (push, not pull-applied)", async () => {
     await signInAs("enabler");
-    writeSettings({ runtime: "node", autoScan: false });
+    writeSettings({ runtime: "node" });
 
     const { status, applied } = await enable();
 
@@ -436,7 +424,7 @@ describe("enable() connected branches", () => {
     expect(status.connected).toBe(true);
     expect(applied).toBeNull(); // remote was empty, so pulled.applied is null
     expect(server.docPostCalls).toBe(1); // seeded via push
-    expect(server.settings.prefs).toMatchObject({ runtime: "node", autoScan: false });
+    expect(server.settings.prefs).toMatchObject({ runtime: "node" });
   });
 
   test("enable() with a populated remote doc pulls and applies it locally instead of pushing", async () => {

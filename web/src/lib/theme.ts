@@ -6,9 +6,10 @@ import { prefersReducedMotion } from "./utils";
  * Shared theme composable for every LunarWerx app (RepoYeti · DevWebUI · Reimagine).
  *
  * ONE implementation, merged from what each app used to hand-roll separately:
- *  - light / dark / system modes, persisted to localStorage, DEFAULTING TO **dark**
- *    (RepoYeti + Reimagine identity; DevWebUI adopts it here, dropping its old OS-`auto`
- *    default, the lone outlier);
+ *  - light / dark / system modes, persisted to localStorage. The DEFAULT here is
+ *    **dark** (RepoYeti + Reimagine identity); DevWebUI overrides it to **system**
+ *    below — its historical default was OS-`auto`, and v1.2 restores that: first
+ *    paint follows the OS unless the visitor has picked a mode;
  *  - toggles `.dark` on <html>, mirrors the raw mode to `html[data-theme]`, and sets
  *    `html.style.colorScheme` so native form controls / scrollbars match;
  *  - a brief crossfade on change, via the View Transitions API where available (one
@@ -22,9 +23,10 @@ import { prefersReducedMotion } from "./utils";
  *    Each app declares its OWN chrome colours via `data-theme-color-dark` / `-light` on that
  *    meta tag (defaults #0a0a0a / #ffffff); apps without the meta simply opt out for free.
  *
- * DEFAULT = dark. The no-flash boot script in each app's index.html <head> MUST use the same
- * storage key (`lunarwerx-theme`) and the same resolve logic (see the kit README "Theme boot
- * snippet"), otherwise the first paint flashes before this composable takes over.
+ * DevWebUI's default = system. The no-flash boot script in its index.html <head> MUST use
+ * the same storage key (`lunarwerx-theme`), the same resolve logic, and the same default
+ * (see the kit README "Theme boot snippet"), otherwise the first paint flashes before this
+ * composable takes over.
  */
 export type ThemeMode = "light" | "dark" | "system";
 
@@ -34,7 +36,13 @@ export const THEME_STORAGE_KEY = "lunarwerx-theme";
 const THEME_TRANSITION_MS = 280;
 
 // Module-level singletons: one source of truth; install the watcher exactly once.
-const mode = useStorage<ThemeMode>(THEME_STORAGE_KEY, "dark");
+// Kit default is "dark"; DevWebUI initializes to "system" (auto light/dark) unless
+// the visitor already chose a mode. Applied BEFORE useStorage reads storage: a bare
+// default would otherwise be persisted as if the user had chosen it.
+if (typeof window !== "undefined" && !localStorage.getItem(THEME_STORAGE_KEY)) {
+  localStorage.setItem(THEME_STORAGE_KEY, "system");
+}
+const mode = useStorage<ThemeMode>(THEME_STORAGE_KEY, "system");
 const prefersDark = usePreferredDark();
 const isDark = computed(() => (mode.value === "system" ? prefersDark.value : mode.value === "dark"));
 

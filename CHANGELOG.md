@@ -4,7 +4,43 @@ All notable changes to DevWebUI are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.0] - 2026-10-05
+
+**First release of the FelixJI privacy fork.** Based on upstream
+[LunarWerxs/DevWebUI](https://github.com/LunarWerxs/DevWebUI) (MIT), with three privacy
+changes and the localization/theme work below. Updates for this build come from THIS
+repo's GitHub Releases, never from upstream.
+
+### Removed (privacy fork)
+
+- **The anonymous install ping is gone entirely.** Upstream folded a per-install id +
+  version + OS family into every update check via a vendor proxy
+  (`studio.connectionsapi.com`); disabling it still let the request through, minus
+  identity. This fork deletes the proxy, the install id, and every telemetry field:
+  the update check is a plain unauthenticated GitHub API read, and a regression test
+  now fails the build if any non-`api.github.com` host is ever contacted by it.
+  `DEVWEBUI_NO_PING` and friends are no longer needed (and no longer do anything).
+- **No machine-wide disk scan, ever.** Upstream swept your home directory plus every
+  fixed drive on first GUI launch (and offered whole-machine "Scan for projects").
+  This fork removes the default roots, the startup/quick/deep presets, the launch
+  auto-scan and its settings, and the focused scan UI: the daemon's scan API now
+  REQUIRES explicit folder paths and refuses anything else. What remains is a folder
+  you explicitly name, drop, or paste (the drop/add flow, `devwebui open <folder>`,
+  and the MCP `scan_projects` tool with its now-mandatory `dirs` argument).
+- **Updater source is this fork's releases** (`FelixJI/DevWebUI`), not upstream's.
+
+### Added
+
+- **Six new UI languages**: 简体中文 (zh-CN), 繁體中文 (zh-TW), 日本語 (ja), Español (es),
+  Deutsch (de), Français (fr), alongside English. First visit picks the browser's preferred
+  language automatically; the choice persists and can be changed in Settings → Appearance.
+  Non-English catalogs ship flagged `machine-draft` (the language picker says so) until a
+  human proofreads them. The daemon/CLI stay English.
+
+- **Theme: follow the system.** The default theme mode is now `system` (auto light/dark):
+  first paint tracks the OS preference live, no reload needed on OS theme change. A Theme row
+  in Settings → Appearance picks System / Light / Dark explicitly; the header quick-toggle now
+  flips whatever is currently on screen (leaving `system` mode).
 
 ### Changed
 

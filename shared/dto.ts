@@ -134,8 +134,9 @@ export interface ScanResult {
   roots: string[];
 }
 
-/** Server-owned scan profiles — ask for an intent, not raw depth/budget/limit numbers. */
-export type ScanPreset = "startup" | "quick" | "deep" | "scoped";
+/** Server-owned scan profiles — ask for an intent, not raw depth/budget/limit numbers.
+ *  This fork ships exactly one: `scoped` (an explicitly named folder). */
+export type ScanPreset = "scoped";
 
 // ---- settings -------------------------------------------------------------
 
@@ -147,19 +148,6 @@ export interface Settings {
   autoStartOnLaunch: boolean; // start every enabled server when the daemon boots (default OFF)
   monitorResources: boolean; // sample per-process CPU + memory (in-process on Windows; no child processes)
   linkHost: string; // host used when opening a process from its title (http://<host>:<port>); blank = the GUI page's own hostname
-  autoScan: boolean; // sweep the machine for .devwebui files when the GUI loads (default OFF)
-  firstScanDone: boolean; // per-machine marker: one startup scan runs on the very FIRST launch even when autoScan is off, then this latches so it never repeats. NOT synced (see connections.ts PREF_KEYS).
-  scanExclude: string[]; // extra folder names / absolute paths to skip while scanning
-  skipWindows: boolean; // skip Windows system folders while scanning
-  skipMac: boolean; // skip macOS system folders
-  skipLinux: boolean; // skip Linux system folders
-  osSkip: Record<"windows" | "mac" | "linux", string[]>; // the editable per-OS skip lists (seeded from defaults)
-  /** Anonymous per-install id for the Studio install ping folded into the update check
-   *  (server/src/github-updater.ts) — random, generated once, never synced across machines. */
-  pulseInstallId?: string;
-  /** True once this install's first-ever ping has succeeded — drives the one-time `&new=1` the
-   *  ping sends so Studio's install counter (not a returning-install re-check) only counts it once. */
-  pulseInstallReported?: boolean;
   /**
    * Auto-update the app on a schedule: check the update remote, and when a newer commit is
    * available AND the working tree is clean (canApply), pull + reinstall + rebuild, then

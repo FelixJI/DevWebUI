@@ -41,15 +41,27 @@ export function createAppI18n(
   const supported = Object.keys(messages);
   const isSupported = (code: string): boolean => supported.includes(code);
 
-  // Prefer a saved choice, else fall back to the base locale. (No auto
-  // browser-detect yet, apps ship one language. Add `navigator.language`
-  // matching here once catalogs grow.)
+  // Prefer a saved choice, else the browser's preferred language, else the base
+  // locale. Browser matching walks navigator.languages in order: an exact hit
+  // ("zh-CN" for zh-CN) wins; otherwise the first supported locale sharing the
+  // primary subtag ("zh-TW" → "zh", "de-AT" → "de") is used, in the order the
+  // app registered the catalogs.
   function initialLocale(): string {
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved && isSupported(saved)) return saved;
     } catch {
       /* localStorage can throw in private mode, fall through to the default */
+    }
+    if (typeof navigator !== "undefined") {
+      for (const lang of navigator.languages ?? [navigator.language]) {
+        if (!lang) continue;
+        const lower = lang.toLowerCase();
+        if (isSupported(lower)) return lower;
+        const primary = lower.split("-")[0];
+        const byPrimary = supported.find((s) => s.toLowerCase().split("-")[0] === primary);
+        if (byPrimary) return byPrimary;
+      }
     }
     return DEFAULT_LOCALE;
   }

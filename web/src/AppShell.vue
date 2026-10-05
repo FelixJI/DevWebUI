@@ -18,8 +18,7 @@ import NotificationsDrawer from "./components/NotificationsDrawer.vue";
 import AppFooter from "@/shell/AppFooter.vue";
 import { useAppStore } from "./store";
 import { toast } from "vue-sonner";
-import { getSettings, saveSettings, scanForDevWebUI, type ScanResult } from "@/api";
-import type { AppNotification, ProcessView } from "@/types";
+import type { ProcessView } from "@/types";
 
 const { t } = useI18n({ useScope: "global" });
 
@@ -31,8 +30,6 @@ const drawerOpen = ref(false);
 const notificationsOpen = ref(false);
 const errorsFilter = ref<string | null>(null);
 const addOpen = ref(false);
-const addScanOnOpen = ref(false);
-const addPrefillScan = ref<ScanResult | null>(null);
 const settingsOpen = ref(false);
 // Any right-side panel (settings, logs, notifications) pushes the page content.
 const anyPanel = computed(() => settingsOpen.value || drawerOpen.value || notificationsOpen.value);
@@ -87,27 +84,12 @@ function openNotifications() {
   closeOtherPanels("notifications");
   errorsFilter.value = null;
   notificationsOpen.value = true;
-  store.markNotificationsRead();
 }
 
 function openProcessErrors(processId: string) {
   closeOtherPanels("notifications");
   errorsFilter.value = processId;
   notificationsOpen.value = true;
-}
-
-/**
- * "Review & add" on a scan notification: open the Add dialog prefilled. The
- * notification is intentionally LEFT in place — it's only ever removed when the
- * user explicitly dismisses it (or clears the list), so a stray/mis-click never
- * loses the find before they've actually added anything.
- */
-function reviewNotification(n: AppNotification) {
-  if (!n.scan) return;
-  addScanOnOpen.value = false;
-  addPrefillScan.value = n.scan;
-  addOpen.value = true;
-  notificationsOpen.value = false;
 }
 
 function onAddProcess(projectId: string) {
@@ -134,46 +116,7 @@ async function reopenAdd() {
 }
 
 function onAddProject() {
-  addScanOnOpen.value = false;
-  addPrefillScan.value = null;
   void reopenAdd();
-}
-
-function onScan() {
-  addPrefillScan.value = null;
-  addScanOnOpen.value = true;
-  void reopenAdd();
-}
-
-/** Sweep the machine on launch (if enabled) and offer configured/detectable projects. */
-async function autoScanOnStart() {
-  try {
-    const s = await getSettings();
-    // Auto-scan is OFF by default now, but the VERY FIRST launch still sweeps once so a brand-new
-    // install isn't an empty screen. `firstScanDone` latches that one-time run (persisted per
-    // machine); after it, only the explicit auto-scan toggle triggers a startup sweep.
-    const firstRun = !s.firstScanDone;
-    if (!s.autoScan && !firstRun) return;
-    // Mark it done up front (best-effort, fire-and-forget) so a fast second mount can't double-fire.
-    if (firstRun) void saveSettings({ firstScanDone: true });
-    await store.loadIgnoredProjects();
-    // Thorough background sweep (server-owned "startup" preset: all drives, depth 12,
-    // ~30s budget). Deferred + notification-only, so the depth costs us nothing.
-    const result = await scanForDevWebUI({ preset: "startup", detectPackages: true });
-    const loadedFiles = new Set(projects.value.map((p) => p.path.toLowerCase()));
-    const loadedDirs = new Set(
-      projects.value.map((p) => p.path.replace(/[\\/][^\\/]+$/, "").toLowerCase()),
-    );
-    const fresh = result.files.filter((f) => !loadedFiles.has(f.path.toLowerCase()));
-    const ignored = new Set(store.ignoredProjects.map((p) => p.toLowerCase()));
-    const detected = (result.detected ?? []).filter(
-      (p) => !loadedDirs.has(p.path.toLowerCase()) && !ignored.has(p.path.toLowerCase()),
-    );
-    // Surface finds as a (non-intrusive) notification rather than hijacking with a dialog.
-    if (fresh.length || detected.length) store.notifyScan({ ...result, files: fresh, detected });
-  } catch {
-    /* scan is best-effort */
-  }
 }
 
 /** Run work when the browser is idle (or shortly after) — keeps it off the startup path. */
@@ -212,9 +155,8 @@ onMounted(async () => {
   void initSync();
   await store.refresh().catch(() => {}); // best-effort initial load — a failed fetch just leaves
   // the empty/previous project list until the SSE stream or next poll catches it up
-  // Defer the machine sweep so the UI paints first (low-priority background scan).
+  // Defer the update check so the UI paints first.
   scheduleIdle(() => void store.checkForUpdate());
-  scheduleIdle(() => void autoScanOnStart());
 });
 </script>
 
@@ -229,7 +171,6 @@ onMounted(async () => {
       @add="onAddProject"
       @notifications="openNotifications"
       @settings="openSettings"
-      @scan="onScan"
     />
 
     <main class="flex-1 py-6">
@@ -261,18 +202,13 @@ onMounted(async () => {
       :project-id="formProjectId"
       :initial="formInitial"
     />
-    <AddProjectDialog
-      v-model:open="addOpen"
-      :scan-on-open="addScanOnOpen"
-      :prefill-scan="addPrefillScan"
-    />
+    <AddProjectDialog v-model:open="addOpen" />
     <Settings v-model:open="settingsOpen" :side="panelSide" />
     <LogDrawer v-model:open="drawerOpen" :process-id="selected" />
     <NotificationsDrawer
       v-model:open="notificationsOpen"
       :process-id="errorsFilter"
       @clear-filter="errorsFilter = null"
-      @review="reviewNotification"
     />
 
     <AppFooter discord="https://lunarwerx.com/discord/devwebui" />

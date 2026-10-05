@@ -25,7 +25,6 @@ import {
   takeOverAutostart,
 } from "../takeover";
 import { scanForDevWebUI, SCAN_PRESETS, type ScanPreset } from "../scan";
-import { readSettings } from "../runtime";
 import type { ProjectView } from "../types";
 import { ROUTES } from "../routes";
 import { fail, guard, readBody } from "./core";
@@ -183,18 +182,19 @@ async function handleProjectsBrowseFolder(c: Context) {
   return dir ? c.json({ ok: true, path: dir }) : c.json({ cancelled: true });
 }
 
-// Fast, bounded sweep of the machine for existing .devwebui files. Serialized and
+// Bounded scan of EXPLICITLY named folders (a dropped/pasted path). Serialized and
 // abort-aware in scan.ts — passing the request signal stops this caller's walk if
-// the client navigates away without cancelling another caller's scan.
+// the client navigates away without cancelling another caller's scan. There is NO
+// machine-wide default: roots are required, and an absent/empty list is refused.
 async function handleProjectsScan(c: Context) {
   const body = await readBody(c);
-  const roots = Array.isArray(body.roots) ? body.roots.map(String).filter(Boolean) : undefined;
+  const roots = Array.isArray(body.roots) ? body.roots.map(String).filter(Boolean) : [];
+  if (!roots.length) return fail(c, "roots required — this build only scans folders you name", 400);
   const bodyExclude = Array.isArray(body.exclude) ? body.exclude.map(String) : [];
   const preset: ScanPreset | undefined =
     typeof body.preset === "string" && body.preset in SCAN_PRESETS
       ? (body.preset as ScanPreset)
       : undefined;
-  const s = readSettings();
   return c.json(
     await scanForDevWebUI({
       roots,
@@ -205,14 +205,7 @@ async function handleProjectsScan(c: Context) {
       limit: typeof body.limit === "number" ? body.limit : undefined,
       budgetMs: typeof body.budgetMs === "number" ? body.budgetMs : undefined,
       signal: c.req.raw.signal,
-      // Saved excludes + the (editable) OS system-folder lists whose toggle is on.
-      exclude: [
-        ...bodyExclude,
-        ...s.scanExclude,
-        ...(s.skipWindows ? s.osSkip.windows : []),
-        ...(s.skipMac ? s.osSkip.mac : []),
-        ...(s.skipLinux ? s.osSkip.linux : []),
-      ],
+      exclude: bodyExclude,
     }),
   );
 }
@@ -249,8 +242,8 @@ export function registerProjectRoutes(app: Hono, manager: Manager) {
 
   app.post(ROUTES.projectsScan, handleProjectsScan);
 
-  // Ignore list for detected (not-yet-added) projects — keeps the background scan
-  // from re-surfacing folders the user dismissed. Keyed by absolute directory path.
+  // Ignore list for detected (not-yet-added) projects — keeps folder-scan results
+  // from re-surfacing dirs the user dismissed. Keyed by absolute directory path.
   app.get(ROUTES.projectsIgnored, (c) => c.json(readIgnoredProjects()));
   app.post(ROUTES.projectsIgnore, handleProjectsIgnore);
   app.post(ROUTES.projectsUnignore, handleProjectsUnignore);

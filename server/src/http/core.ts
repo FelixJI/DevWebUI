@@ -184,13 +184,6 @@ async function handlePutSettings(c: Context, manager: Manager) {
     autoStartOnLaunch: optBool(body.autoStartOnLaunch),
     monitorResources: optBool(body.monitorResources),
     linkHost: typeof body.linkHost === "string" ? body.linkHost : undefined,
-    autoScan: optBool(body.autoScan),
-    firstScanDone: optBool(body.firstScanDone),
-    scanExclude: Array.isArray(body.scanExclude) ? body.scanExclude : undefined,
-    skipWindows: optBool(body.skipWindows),
-    skipMac: optBool(body.skipMac),
-    skipLinux: optBool(body.skipLinux),
-    osSkip: body.osSkip && typeof body.osSkip === "object" ? body.osSkip : undefined,
     autoUpdate: optBool(body.autoUpdate),
     autoUpdateIntervalSecs:
       typeof body.autoUpdateIntervalSecs === "number" &&

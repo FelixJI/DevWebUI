@@ -15,7 +15,6 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { writeJsonAtomic } from "./atomic-write";
 import { dataDir } from "./data-dir";
-import { OS_SKIP, type SkipOs } from "./scan";
 import {
   AUTO_UPDATE_INTERVAL_DEFAULT_S,
   clampAutoUpdateInterval,
@@ -77,35 +76,6 @@ export function withRuntime(command: string, runtime?: Runtime): string {
 const settingsFile = (): string => path.join(dataDir(), "settings.json");
 const RUNTIME_PREFS: RuntimePref[] = ["auto", "node", "bun"];
 
-const cleanList = (v: unknown, fallback: string[]): string[] =>
-  Array.isArray(v)
-    ? [
-        ...new Set(
-          v
-            .map(String)
-            .map((s) => s.trim().toLowerCase())
-            .filter(Boolean),
-        ),
-      ]
-    : fallback;
-const cleanExclude = (v: unknown): string[] =>
-  Array.isArray(v)
-    ? [
-        ...new Set(
-          v
-            .map(String)
-            .map((s) => s.trim())
-            .filter(Boolean),
-        ),
-      ]
-    : [];
-
-// The current OS's skip is on by default; the others off. Stored values win.
-const skipToggleDefaults = () => ({
-  skipWindows: process.platform === "win32",
-  skipMac: process.platform === "darwin",
-  skipLinux: process.platform === "linux",
-});
 const bool = (v: unknown, fallback: boolean): boolean => (typeof v === "boolean" ? v : fallback);
 // A trimmed string setting. A blank value is kept (it means "use the GUI page's own
 // hostname"); only a missing/non-string value falls back to the default.
@@ -115,17 +85,7 @@ const cleanStr = (v: unknown, fallback: string): string =>
 // same machine, the LAN IP from another device). Set an explicit host to override.
 const DEFAULT_LINK_HOST = "";
 
-const readOsSkip = (o: unknown, base: Record<SkipOs, string[]>): Record<SkipOs, string[]> => {
-  const src = (o ?? {}) as Partial<Record<SkipOs, unknown>>;
-  return {
-    windows: cleanList(src.windows, base.windows),
-    mac: cleanList(src.mac, base.mac),
-    linux: cleanList(src.linux, base.linux),
-  };
-};
-
 export function readSettings(): Settings {
-  const d = skipToggleDefaults();
   try {
     const s = JSON.parse(readFileSync(settingsFile(), "utf8"));
     return {
@@ -134,20 +94,6 @@ export function readSettings(): Settings {
       autoStartOnLaunch: bool(s.autoStartOnLaunch, false),
       monitorResources: bool(s.monitorResources, true),
       linkHost: cleanStr(s.linkHost, DEFAULT_LINK_HOST),
-      autoScan: bool(s.autoScan, false),
-      firstScanDone: bool(s.firstScanDone, false),
-      scanExclude: cleanExclude(s.scanExclude),
-      skipWindows: bool(s.skipWindows, d.skipWindows),
-      skipMac: bool(s.skipMac, d.skipMac),
-      skipLinux: bool(s.skipLinux, d.skipLinux),
-      osSkip: readOsSkip(s.osSkip, OS_SKIP),
-      pulseInstallId:
-        typeof s.pulseInstallId === "string"
-          ? s.pulseInstallId
-          : typeof s.analyticsInstallId === "string"
-            ? s.analyticsInstallId
-            : undefined,
-      pulseInstallReported: bool(s.pulseInstallReported, false),
       autoUpdate: bool(s.autoUpdate, false),
       autoUpdateIntervalSecs: Number.isFinite(s.autoUpdateIntervalSecs)
         ? clampAutoUpdateInterval(s.autoUpdateIntervalSecs)
@@ -166,11 +112,6 @@ export function readSettings(): Settings {
       autoStartOnLaunch: false,
       monitorResources: true,
       linkHost: DEFAULT_LINK_HOST,
-      autoScan: false,
-      firstScanDone: false,
-      scanExclude: [],
-      ...d,
-      osSkip: readOsSkip(null, OS_SKIP),
       autoUpdate: false,
       autoUpdateIntervalSecs: AUTO_UPDATE_INTERVAL_DEFAULT_S,
       updateNotify: true,
@@ -193,17 +134,6 @@ export function writeSettings(patch: Partial<Settings>): Settings {
     autoStartOnLaunch: bool(patch.autoStartOnLaunch, cur.autoStartOnLaunch),
     monitorResources: bool(patch.monitorResources, cur.monitorResources),
     linkHost: patch.linkHost !== undefined ? cleanStr(patch.linkHost, cur.linkHost) : cur.linkHost,
-    autoScan: patch.autoScan !== undefined ? !!patch.autoScan : cur.autoScan,
-    firstScanDone: patch.firstScanDone !== undefined ? !!patch.firstScanDone : cur.firstScanDone,
-    scanExclude:
-      patch.scanExclude !== undefined ? cleanExclude(patch.scanExclude) : cur.scanExclude,
-    skipWindows: bool(patch.skipWindows, cur.skipWindows),
-    skipMac: bool(patch.skipMac, cur.skipMac),
-    skipLinux: bool(patch.skipLinux, cur.skipLinux),
-    osSkip: patch.osSkip !== undefined ? readOsSkip(patch.osSkip, cur.osSkip) : cur.osSkip,
-    pulseInstallId:
-      typeof patch.pulseInstallId === "string" ? patch.pulseInstallId : cur.pulseInstallId,
-    pulseInstallReported: bool(patch.pulseInstallReported, cur.pulseInstallReported ?? false),
     autoUpdate: bool(patch.autoUpdate, cur.autoUpdate),
     autoUpdateIntervalSecs:
       patch.autoUpdateIntervalSecs !== undefined
@@ -222,11 +152,12 @@ export function writeSettings(patch: Partial<Settings>): Settings {
   return next;
 }
 
-/** Ensure the on-disk file contains every key (incl. osSkip) so users can discover + hand-edit them. */
+/** Ensure the on-disk file exists and parses, so users can discover + hand-edit every key.
+ *  (Legacy scan/ping keys from older installs are dropped by the next save.) */
 export function materializeSettings(): void {
   try {
     const raw = JSON.parse(readFileSync(settingsFile(), "utf8"));
-    if (raw && typeof raw === "object" && raw.osSkip) return; // already complete
+    if (raw && typeof raw === "object") return; // exists and parses — nothing to backfill
   } catch {
     /* missing or invalid — (re)write below */
   }

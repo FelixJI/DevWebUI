@@ -1,18 +1,18 @@
 {
   "name": "devwebui",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
-  "description": "GUI + MCP control plane for your local dev servers. Click to start/stop/restart; agents drive the same daemon over MCP.",
+  "description": "GUI + MCP control plane for your local dev servers. Click to start/stop/restart; agents drive the same daemon over MCP. Privacy fork of LunarWerxs/DevWebUI: no install ping, no machine-wide scan, updates from this repo's releases.",
   "license": "MIT",
-  "author": "LunarWerx Studios (https://lunarwerx.com/)",
-  "homepage": "https://devwebui.github.io",
+  "author": "LunarWerx Studios (https://lunarwerx.com/), forked by FelixJI",
+  "homepage": "https://github.com/FelixJI/DevWebUI#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/LunarWerxs/devwebui.git"
+    "url": "git+https://github.com/FelixJI/DevWebUI.git"
   },
   "bugs": {
-    "url": "https://github.com/LunarWerxs/devwebui/issues"
+    "url": "https://github.com/FelixJI/DevWebUI/issues"
   },
   "keywords": [
     "dev-server",

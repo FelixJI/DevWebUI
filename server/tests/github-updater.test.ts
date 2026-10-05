@@ -101,7 +101,7 @@ function stubFetchJson(handlers: Record<string, () => Response>): typeof fetch {
 test("applyUpdate refuses when the release has no SHA256SUMS.txt manifest", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = stubFetchJson({
-    "/v1/app/devwebui/latest": () =>
+    "/releases/latest": () =>
       new Response(
         JSON.stringify({
           tag_name: `v${REMOTE_VERSION}`,
@@ -128,7 +128,7 @@ test("applyUpdate refuses when the release changed between the check and the dow
   const originalFetch = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = stubFetchJson({
-    "/v1/app/devwebui/latest": () =>
+    "/releases/latest": () =>
       new Response(
         JSON.stringify({
           tag_name: calls++ === 0 ? `v${REMOTE_VERSION}` : "v99.0.1",
@@ -153,7 +153,7 @@ test("applyUpdate refuses when the downloaded bytes don't match the published ch
   const fakeBytes = new TextEncoder().encode("not-the-real-binary");
   const wrongDigest = "0".repeat(64); // guaranteed not to equal sha256(fakeBytes)
   globalThis.fetch = stubFetchJson({
-    "/v1/app/devwebui/latest": () =>
+    "/releases/latest": () =>
       new Response(
         JSON.stringify({
           tag_name: `v${REMOTE_VERSION}`,
@@ -184,21 +184,16 @@ test("applyUpdate refuses when the downloaded bytes don't match the published ch
 });
 
 /**
- * The update check must survive its primary endpoint going away.
- *
- * This is the YTSort failure (2026-08) in a different shape: an artifact shipped with a single
- * baked-in update URL, that URL later stops resolving, and every install polls a dead link
- * forever with nothing surfaced to the user or the maintainer. One hardcoded endpoint and no
- * second opinion is that bug waiting to happen, so a Studio failure must fall through to
- * GitHub's own releases API, the one URL that survives an owner or repo rename.
+ * PRIVACY REGRESSION TEST (this fork): the update check talks to GitHub's API only —
+ * the upstream vendor proxy (studio.connectionsapi.com install ping) is gone, and no
+ * future edit may quietly reintroduce any non-GitHub egress here.
  */
-test("a failing Studio proxy falls back to GitHub instead of stranding the install", async () => {
+test("the update check contacts GitHub directly and no other host", async () => {
   const seen: string[] = [];
   const real = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input instanceof Request ? input.url : input);
     seen.push(url);
-    if (url.includes("studio.connectionsapi.com")) return new Response("gone", { status: 503 });
     return new Response(JSON.stringify({ tag_name: "v999.0.0", assets: [] }), {
       status: 200,
       headers: { "content-type": "application/json" },
@@ -206,15 +201,17 @@ test("a failing Studio proxy falls back to GitHub instead of stranding the insta
   }) as unknown as typeof fetch;
   try {
     const status = await checkForUpdate({ fresh: true });
-    expect(seen.some((u) => u.includes("studio.connectionsapi.com"))).toBe(true);
-    expect(seen.some((u) => u.includes("api.github.com"))).toBe(true);
+    expect(seen.length).toBeGreaterThan(0);
+    for (const u of seen) {
+      expect(u.startsWith("https://api.github.com/")).toBe(true);
+    }
     expect(status.updateAvailable).toBe(true);
   } finally {
     globalThis.fetch = real;
   }
 });
 
-test("both endpoints down reports the primary failure, not the backstop's", async () => {
+test("an unreachable update source reports the failure", async () => {
   const real = globalThis.fetch;
   globalThis.fetch = (async () => {
     throw new Error("primary is unreachable");
@@ -271,7 +268,7 @@ test("checkForUpdate under a cooldown offers the newest aged release, not the to
     published_at: new Date(Date.now() - 10 * DAY).toISOString(),
   };
   globalThis.fetch = stubFetchJson({
-    "/v1/app/devwebui/latest": () => new Response(JSON.stringify(young), { status: 200 }),
+    "/releases/latest": () => new Response(JSON.stringify(young), { status: 200 }),
     "/releases?per_page=": () => new Response(JSON.stringify([young, aged]), { status: 200 }),
   });
   writeSettings({ updateCooldownDays: 7 });
@@ -290,7 +287,7 @@ test("checkForUpdate under a cooldown fails closed when the release list is unre
   const real = globalThis.fetch;
   const young = { tag_name: "v999.0.0", assets: [], published_at: new Date().toISOString() };
   globalThis.fetch = stubFetchJson({
-    "/v1/app/devwebui/latest": () => new Response(JSON.stringify(young), { status: 200 }),
+    "/releases/latest": () => new Response(JSON.stringify(young), { status: 200 }),
     "/releases?per_page=": () => new Response("rate limited", { status: 403 }),
   });
   writeSettings({ updateCooldownDays: 7 });

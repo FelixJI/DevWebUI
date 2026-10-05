@@ -1,28 +1,18 @@
 <script setup lang="ts">
-// One combined right-side panel for both in-app notifications (e.g. the startup
-// scan found new projects) and the error log. Opened by the TopBar bell; also
-// opened filtered to a single process from a process's error chip.
+// The error-log panel. Opened by the TopBar bell; also opened filtered to a single
+// process from a process's error chip. (The old in-app notifications section — startup
+// scan finds — is gone with machine scanning in this fork.)
 import { computed } from "vue";
-import {
-  CheckCircle2,
-  Copy,
-  FolderOpen,
-  FolderSearch,
-  Inbox,
-  Sparkles,
-  Trash2,
-  X,
-} from "@lucide/vue";
+import { CheckCircle2, Copy, Trash2, X } from "@lucide/vue";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { toast } from "vue-sonner";
 import RightDrawer from "./RightDrawer.vue";
 import IconButton from "./IconButton.vue";
 import { storeToRefs } from "pinia";
 import { useAppStore } from "@/store";
-import { formatAgo, formatAgoCoarse } from "@/lib/format";
+import { formatAgo } from "@/lib/format";
 import { sourceBadgeVariant } from "@/lib/severity";
-import type { AppNotification, ErrorEvent } from "@/types";
+import type { ErrorEvent } from "@/types";
 import { openInEditor } from "@/api";
 import { findSourceFrames, type SourceFrame } from "../../../shared/source-frames";
 import type { OpenInEditorFailure } from "../../../shared/dto";
@@ -32,10 +22,10 @@ const { t } = useI18n({ useScope: "global" });
 
 const open = defineModel<boolean>("open", { required: true });
 const props = defineProps<{ processId?: string | null }>();
-const emit = defineEmits<{ clearFilter: []; review: [notification: AppNotification] }>();
+const emit = defineEmits<{ clearFilter: [] }>();
 
 const store = useAppStore();
-const { allProcesses, errors, notifications, now } = storeToRefs(store);
+const { allProcesses, errors, now } = storeToRefs(store);
 
 const errorList = computed(() =>
   props.processId ? errors.value.filter((e) => e.processId === props.processId) : errors.value,
@@ -204,72 +194,6 @@ async function openFrame(e: ErrorEvent, f?: SourceFrame) {
     toast.error(t(OPEN_FAILURE_KEY["launch-failed"]));
   }
 }
-
-// How many found projects to list inline before collapsing the rest into "+N more".
-const SCAN_PREVIEW = 6;
-
-const SCAN_ROOT_MARKERS = new Set([
-  "client",
-  "clients",
-  "demo",
-  "demos",
-  "example",
-  "examples",
-  "infra",
-  "misc",
-  "script",
-  "scripts",
-  "server",
-  "servers",
-  "service",
-  "services",
-  "src",
-  "tool",
-  "tools",
-  "web",
-  "www",
-]);
-
-function scanPathParts(filePath: string) {
-  return filePath.split(/[\\/]+/).filter(Boolean);
-}
-
-function scanRootName(filePath: string) {
-  const dir = scanPathParts(filePath).slice(0, -1);
-
-  for (let i = 0; i < dir.length - 1; i++) {
-    if (i > 0 && SCAN_ROOT_MARKERS.has(dir[i].toLowerCase())) return dir[i - 1];
-  }
-
-  let i = dir.length - 1;
-  while (i > 0 && SCAN_ROOT_MARKERS.has(dir[i].toLowerCase())) i--;
-  return dir[i] ?? t("notifications.scanRootFallback");
-}
-
-function scanRootLabel(n: AppNotification) {
-  const roots = [
-    ...new Set([
-      ...(n.scan?.files.map((f) => scanRootName(f.path)) ?? []),
-      ...(n.scan?.detected?.map((p) => scanRootName(`${p.path}\\package.json`)) ?? []),
-    ]),
-  ];
-  if (!roots.length) return t("notifications.scanRootFallback");
-  if (roots.length === 1) return roots[0];
-  return t("notifications.scanMultipleRoots", { count: roots.length });
-}
-
-function scanCount(n: AppNotification) {
-  return (n.scan?.files.length ?? 0) + (n.scan?.detected?.length ?? 0);
-}
-
-/** The localized title for a notification — scan notifications derive it from their find count. */
-function notifTitle(n: AppNotification) {
-  if (n.kind === "scan" && n.scan) {
-    const count = scanCount(n);
-    return t("notifications.scanFoundTitle", { count, root: scanRootLabel(n) }, count);
-  }
-  return n.title ?? "";
-}
 </script>
 
 <template>
@@ -290,85 +214,6 @@ function notifTitle(n: AppNotification) {
     </template>
 
     <div class="mt-3 min-h-0 flex-1 space-y-6 overflow-auto">
-      <!-- Notifications -->
-      <section v-if="!processId" class="space-y-2">
-        <div class="flex items-center justify-between">
-          <h3 class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{{ t("notifications.sectionNotifications") }}</h3>
-          <IconButton
-            v-if="notifications.length"
-            :tooltip="t('notifications.clear')"
-            @click="store.clearNotifications()"
-          >
-            <Trash2 class="size-4" />
-          </IconButton>
-        </div>
-
-        <div
-          v-if="!notifications.length"
-          class="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border py-8 text-center text-sm text-muted-foreground"
-        >
-          <Inbox class="size-7 opacity-60" />
-          {{ t("notifications.allCaughtUp") }}
-        </div>
-
-        <div
-          v-for="n in notifications"
-          :key="n.id"
-          class="flex items-start gap-3 rounded-lg border border-border bg-card p-3"
-          :class="n.read ? '' : 'border-primary/30 bg-primary/5'"
-        >
-          <span class="mt-0.5 grid size-8 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
-            <FolderSearch class="size-4" />
-          </span>
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2">
-              <span class="truncate text-sm font-medium">{{ notifTitle(n) }}</span>
-              <span class="ms-auto shrink-0 text-xs text-muted-foreground">{{ formatAgoCoarse(now, n.ts) }}</span>
-              <IconButton :tooltip="t('notifications.dismiss')" @click="store.dismissNotification(n.id)">
-                <X class="size-3.5" />
-              </IconButton>
-            </div>
-
-            <!-- What was actually found: process count + path, so the user
-                 can tell at a glance whether it's worth adding. -->
-            <ul v-if="scanCount(n)" class="mt-2 flex flex-col gap-0.5">
-              <li
-                v-for="f in (n.scan?.files ?? []).slice(0, SCAN_PREVIEW)"
-                :key="f.path"
-                class="flex min-w-0 items-center gap-2 rounded-md bg-muted/40 px-2 py-1"
-              >
-                <FolderOpen class="size-3.5 shrink-0 text-primary" />
-                <span class="shrink-0 rounded bg-primary/10 px-1 py-0.5 text-3xs font-medium uppercase text-primary">
-                  {{ t("scanResults.configuredBadge") }}
-                </span>
-                <span class="shrink-0 text-xs tabular-nums text-muted-foreground">{{ t("scanResults.procCount", { count: f.processes }) }}</span>
-                <code class="min-w-0 flex-1 truncate text-xs text-muted-foreground">{{ f.path }}</code>
-              </li>
-              <li
-                v-for="p in (n.scan?.detected ?? []).slice(0, Math.max(0, SCAN_PREVIEW - (n.scan?.files.length ?? 0)))"
-                :key="`detected:${p.path}`"
-                class="flex min-w-0 items-center gap-2 rounded-md bg-muted/40 px-2 py-1"
-              >
-                <Sparkles class="size-3.5 shrink-0 text-primary" />
-                <span class="shrink-0 rounded bg-primary/10 px-1 py-0.5 text-3xs font-medium uppercase text-primary">
-                  {{ t("scanResults.detectedBadge") }}
-                </span>
-                <span v-if="p.framework" class="shrink-0 text-xs text-muted-foreground">{{ p.framework }}</span>
-                <span class="shrink-0 text-xs tabular-nums text-muted-foreground">{{ t("scanResults.procCount", { count: p.processes }) }}</span>
-                <code class="min-w-0 flex-1 truncate text-xs text-muted-foreground">{{ p.path }}</code>
-              </li>
-            </ul>
-            <p v-if="scanCount(n) > SCAN_PREVIEW" class="mt-1 px-2 text-xs text-muted-foreground">
-              {{ t("notifications.scanMore", { count: scanCount(n) - SCAN_PREVIEW }) }}
-            </p>
-
-            <div v-if="n.scan" class="mt-2 flex items-center gap-2">
-              <Button size="sm" @click="emit('review', n)">{{ t("notifications.reviewAndAdd") }}</Button>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <!-- Errors -->
       <section class="space-y-2">
         <div class="flex items-center justify-between">

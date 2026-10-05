@@ -7,14 +7,12 @@ import { bindSignInNudgeStatus, nudgeOnSettingsChange } from "@/lib/sign-in-nudg
 import { useTheme } from "@/lib/theme";
 import { rankProjectsBySearch } from "@/lib/arrange";
 import type { AddResult, DetectedProcess } from "./api";
-import type { ScanResult } from "./api";
 import type { SyncStatus } from "./api";
 import type { SafeModeStatus } from "../../shared/dto";
 import type { UpdateApplyResult, UpdateStatus } from "./api";
 import { MAX_LOG_LINES } from "../../shared/constants";
 import type {
   AlertEvent,
-  AppNotification,
   ErrorEvent,
   LogEntry,
   LogLine,
@@ -29,7 +27,6 @@ import type {
 const ALL_STATUS_BUCKETS: StatusBucket[] = ["running", "busy", "crashed", "stopped"];
 const VIEW_MODE_KEY = "devwebui.viewMode.v2";
 const LEGACY_VIEW_MODE_KEY = "devwebui.viewMode";
-let notifSeq = 0;
 // Monotonic id for every log line the store ever appends (fetch or SSE), so the
 // drawer can key its list on stable identity instead of array index (see LogDrawer.vue).
 let logSeq = 0;
@@ -184,47 +181,6 @@ export const useAppStore = defineStore("app", () => {
     } catch {
       /* keep the optimistic default — Settings still reads/writes directly */
     }
-  }
-
-  /**
-   * In-app notifications (e.g. the startup scan found new projects). Ephemeral —
-   * kept in memory only, since the auto-scan regenerates them on next launch.
-   */
-  const notifications = ref<AppNotification[]>([]);
-  const unreadNotifications = computed(() => notifications.value.filter((n) => !n.read).length);
-
-  /**
-   * Record that the startup scan found new configured or detectable projects.
-   * The notification carries the full `scan` so the drawer can list exactly WHAT was
-   * found (names + paths + process counts) and localize its own title/body.
-   */
-  function notifyScan(scan: ScanResult) {
-    if (!scan.files.length && !(scan.detected?.length ?? 0)) return;
-    // One rolling "scan" notification — a re-scan refreshes it rather than stacking.
-    const existing = notifications.value.find((n) => n.kind === "scan");
-    if (existing) {
-      existing.scan = scan;
-      existing.ts = Date.now();
-      existing.read = false;
-    } else {
-      notifications.value.unshift({
-        id: `scan-${Date.now()}-${notifSeq++}`,
-        kind: "scan",
-        ts: Date.now(),
-        read: false,
-        scan,
-      });
-    }
-  }
-
-  function dismissNotification(id: string) {
-    notifications.value = notifications.value.filter((n) => n.id !== id);
-  }
-  function markNotificationsRead() {
-    for (const n of notifications.value) n.read = true;
-  }
-  function clearNotifications() {
-    notifications.value = [];
   }
 
   /**
@@ -685,8 +641,6 @@ export const useAppStore = defineStore("app", () => {
     logs,
     errors,
     alertEvents,
-    notifications,
-    unreadNotifications,
     monitorResources,
     linkHost,
     autoUpdate,
@@ -701,10 +655,6 @@ export const useAppStore = defineStore("app", () => {
     portableMode,
     setAutoUpdate,
     loadSettings,
-    notifyScan,
-    dismissNotification,
-    markNotificationsRead,
-    clearNotifications,
     viewMode,
     sortKey,
     sortDir,

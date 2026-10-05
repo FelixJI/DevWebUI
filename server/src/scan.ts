@@ -1,15 +1,13 @@
 // ---------------------------------------------------------------------------
-// Fast, bounded project scan. It always finds existing .devwebui files, and can
-// optionally detect unconfigured package-script projects while walking. The
-// breadth-first walk (a) prunes node_modules + heavy/system dirs, (b) caps depth,
-// total results, and wall-clock time, and (c) reads many directories concurrently.
-// Bounded by design so it returns quickly on a typical dev tree and never runs
-// away on a full drive.
+// Fast, bounded FOLDER scan. This fork removed every machine-level sweep (no
+// home-dir or all-drives default roots, no startup/quick/deep presets, no
+// auto-scan): the ONLY entry is an explicit folder the user named, dropped, or
+// pasted. The breadth-first walk (a) prunes node_modules + heavy dirs, (b) caps
+// depth, total results, and wall-clock time, and (c) reads many directories
+// concurrently. Bounded by design so it returns quickly and never runs away.
 // ---------------------------------------------------------------------------
-import { existsSync } from "node:fs";
 import type { Dirent } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { detectProject } from "./detect";
 import type { DetectedProject, FoundFile, ScanResult, ScanPreset } from "../../shared/dto";
@@ -47,92 +45,6 @@ const PRUNE = new Set([
   "xboxgames",
 ]);
 
-// OS system-folder skip groups — added to the scan's excludes only when the
-// matching toggle is on (see Settings). Folder names, matched anywhere.
-export type SkipOs = "windows" | "mac" | "linux";
-export const OS_SKIP: Record<SkipOs, string[]> = {
-  windows: [
-    "windows",
-    "winnt",
-    "windows.old",
-    "program files",
-    "program files (x86)",
-    "programdata",
-    "appdata",
-    "application data",
-    "windowsapps",
-    "$recycle.bin",
-    "system volume information",
-    "$windows.~ws",
-    "$windows.~bt",
-    "$winreagent",
-    "$sysreset",
-    "$getcurrent",
-    "recovery",
-    "perflogs",
-    "config.msi",
-    "msocache",
-    "packages.microsoft.com",
-    "boot",
-    "efi",
-    "documents and settings",
-    "all users",
-    "default user",
-    "onedrivetemp",
-    "windows defender",
-    "intel",
-    "amd",
-    "nvidia",
-    "drivers",
-    "msbuild",
-  ],
-  mac: [
-    "library",
-    "system",
-    "applications",
-    "private",
-    "cores",
-    "network",
-    "volumes",
-    "system volume information",
-    "deriveddata",
-  ],
-  linux: [
-    "proc",
-    "sys",
-    "dev",
-    "run",
-    "mnt",
-    "media",
-    "var",
-    "usr",
-    "boot",
-    "opt",
-    "srv",
-    "lost+found",
-    "snap",
-    "tmp",
-    "lib",
-    "lib64",
-    "sbin",
-    "etc",
-  ],
-};
-
-/** Sensible default roots: the user's home, plus every non-home fixed drive on Windows. */
-export function defaultScanRoots(): string[] {
-  const home = os.homedir();
-  const roots = [home];
-  if (process.platform === "win32") {
-    const homeDrive = home.slice(0, 3).toUpperCase(); // e.g. "C:\"
-    for (let c = 65; c <= 90; c++) {
-      const root = `${String.fromCharCode(c)}:\\`;
-      if (root.toUpperCase() !== homeDrive && existsSync(root)) roots.push(root);
-    }
-  }
-  return roots;
-}
-
 async function describe(file: string): Promise<FoundFile> {
   try {
     const j = JSON.parse(await readFile(file, "utf8"));
@@ -159,19 +71,17 @@ async function describeDetected(dir: string): Promise<DetectedProject | null> {
   }
 }
 
-/** Named scan profiles owned by the daemon, so call sites ask for an intent, not raw numbers. */
+/** Named scan profiles owned by the daemon, so call sites ask for an intent, not raw numbers.
+ *  This fork ships exactly one: `scoped`, a single folder the caller named explicitly. */
 export const SCAN_PRESETS: Record<
   ScanPreset,
   { maxDepth: number; budgetMs: number; limit: number }
 > = {
-  quick: { maxDepth: 3, budgetMs: 6000, limit: 500 }, // shallow first pass — the likely projects
-  deep: { maxDepth: 16, budgetMs: 30000, limit: 5000 }, // thorough whole-machine sweep
   scoped: { maxDepth: 16, budgetMs: 30000, limit: 5000 }, // a single typed folder (small, so fast)
-  startup: { maxDepth: 12, budgetMs: 30000, limit: 5000 }, // background launch scan
 };
 
 export interface ScanOptions {
-  roots?: string[];
+  roots?: string[]; // REQUIRED: the explicit folders to walk — there is no machine-wide default
   maxDepth?: number;
   limit?: number;
   budgetMs?: number;
@@ -190,6 +100,11 @@ let scanChain: Promise<unknown> = Promise.resolve();
 const inflight = new Map<string, Promise<ScanResult>>();
 
 export function scanForDevWebUI(opts: ScanOptions = {}): Promise<ScanResult> {
+  // No implicit roots, ever: a scan without explicit folders is a machine sweep, and this
+  // fork refuses those outright instead of guessing the user's home or every drive.
+  if (!opts.roots?.length) {
+    return Promise.reject(new Error("scan requires explicit roots (folder paths)"));
+  }
   const { signal, preset, ...rest } = opts;
   const base = preset ? SCAN_PRESETS[preset] : undefined;
   const merged: ScanOptions = {
@@ -239,7 +154,7 @@ function parseScanOptions(opts: ScanOptions): ScanBounds {
     else excludeNames.add(t);
   }
   return {
-    roots: (opts.roots?.length ? opts.roots : defaultScanRoots()).map((r) => path.resolve(r)),
+    roots: (opts.roots ?? []).map((r) => path.resolve(r)),
     excludeNames,
     excludePaths,
     maxDepth: Math.min(Math.max(opts.maxDepth ?? 12, 1), 16),

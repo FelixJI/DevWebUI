@@ -10,8 +10,6 @@ import {
   Cpu,
   EyeOff,
   ExternalLink,
-  FilterX,
-  FolderX,
   Hourglass,
   Languages,
   MessageCircleQuestion,
@@ -19,8 +17,8 @@ import {
   Plug,
   Power,
   RefreshCw,
-  Search,
   Sun,
+  SunMoon,
   Unplug,
 } from "@lucide/vue";
 import Sidebar from "@/shell/Sidebar.vue";
@@ -31,7 +29,6 @@ import type { PushPanelSide } from "@/shell/usePushPanel";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -59,7 +56,8 @@ const { t, locale } = useI18n({ useScope: "global" });
 
 // Light/dark/system lives here. Writable: assigning 'light' | 'dark' | 'system'
 // persists to localStorage and toggles <html class="dark"> via the shared composable.
-const { mode: theme } = useTheme();
+// isDark is the RESOLVED darkness (mode 'system' tracks the OS preference live).
+const { mode: theme, isDark } = useTheme();
 
 // Kit-level tooltip kill-switch (localStorage-persisted, shared across the whole app via
 // TooltipProvider). Bound directly here — no server round-trip, no shared/dto.ts change.
@@ -78,11 +76,6 @@ const freePortOnStart = ref(true);
 const autoStartOnLaunch = ref(false);
 const monitorResources = ref(true);
 const linkHost = ref("");
-const autoScan = ref(false);
-const excludeText = ref("");
-const skipWindows = ref(false);
-const skipMac = ref(false);
-const skipLinux = ref(false);
 const restartNow = ref(true);
 const autoUpdate = ref(false);
 const updateNotify = ref(true);
@@ -109,13 +102,6 @@ const tabs = computed<{ id: TabId; label: string }[]>(() => [
   { id: "alerts", label: t("settings.tabAlerts") },
 ]);
 
-// OS names are proper nouns — deliberately left untranslated.
-const skipGroups = [
-  { key: "skipWindows" as const, label: "Windows", model: skipWindows },
-  { key: "skipMac" as const, label: "macOS", model: skipMac },
-  { key: "skipLinux" as const, label: "Linux", model: skipLinux },
-];
-
 // `label` is the full descriptive text shown in the open list; `short` is what the
 // closed trigger shows (the full text doesn't fit in the trigger's width).
 const options = computed(() => [
@@ -136,11 +122,6 @@ watch(open, async (v) => {
     autoStartOnLaunch.value = s.autoStartOnLaunch;
     monitorResources.value = s.monitorResources;
     linkHost.value = s.linkHost;
-    autoScan.value = s.autoScan;
-    excludeText.value = s.scanExclude.join("\n");
-    skipWindows.value = s.skipWindows;
-    skipMac.value = s.skipMac;
-    skipLinux.value = s.skipLinux;
     autoUpdate.value = s.autoUpdate ?? false;
     updateNotify.value = s.updateNotify ?? true;
     updateCooldownDays.value = s.updateCooldownDays ?? 0;
@@ -156,21 +137,12 @@ async function save() {
   saving.value = true;
   const turningPortableOn = portableMode.value && !loadedPortableMode.value;
   try {
-    const scanExclude = excludeText.value
-      .split(/[\n,]/)
-      .map((t) => t.trim())
-      .filter(Boolean);
     const saved = await saveSettings({
       runtime: runtime.value,
       freePortOnStart: freePortOnStart.value,
       autoStartOnLaunch: autoStartOnLaunch.value,
       monitorResources: monitorResources.value,
       linkHost: linkHost.value,
-      autoScan: autoScan.value,
-      scanExclude,
-      skipWindows: skipWindows.value,
-      skipMac: skipMac.value,
-      skipLinux: skipLinux.value,
       restart: restartNow.value,
       autoUpdate: autoUpdate.value,
       updateNotify: updateNotify.value,
@@ -219,7 +191,9 @@ async function save() {
     :description="t('settings.description')"
     @update:open="(v: boolean) => { if (!saving) open = v }"
   >
-    <!-- Theme is a light/dark toggle icon in the panel header (next to the ✕), not a settings row. -->
+    <!-- Theme is a resolved-darkness toggle icon in the panel header (next to the ✕):
+         flips light↔dark from whatever the screen currently shows (leaving 'system'),
+         while the full system/light/dark choice is the Theme row under Appearance. -->
     <template #header>
       <span class="text-xs font-semibold">{{ t("settings.title") }}</span>
       <button
@@ -227,9 +201,9 @@ async function save() {
         class="ms-auto grid size-7 place-items-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
         :aria-label="t('settings.theme')"
         :title="tooltipsEnabled ? t('settings.theme') : undefined"
-        @click="theme = theme === 'dark' ? 'light' : 'dark'"
+        @click="theme = isDark ? 'light' : 'dark'"
       >
-        <Sun v-if="theme === 'dark'" class="size-4" />
+        <Sun v-if="isDark" class="size-4" />
         <Moon v-else class="size-4" />
       </button>
     </template>
@@ -242,6 +216,18 @@ async function save() {
       <!-- General: appearance, resource monitoring, app updates, cloud sync ──── -->
       <div v-show="tab === 'general'" class="flex flex-col gap-5">
       <SettingsGroup :label="t('settings.appearance')">
+        <SettingsRow :icon="SunMoon" :label="t('settings.theme')">
+          <template #control>
+            <Select v-model="theme">
+              <SelectTrigger id="sd-theme" class="h-8 w-40" :aria-label="t('settings.theme')"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="system">{{ t("settings.themeSystem") }}</SelectItem>
+                <SelectItem value="light">{{ t("settings.themeLight") }}</SelectItem>
+                <SelectItem value="dark">{{ t("settings.themeDark") }}</SelectItem>
+              </SelectContent>
+            </Select>
+          </template>
+        </SettingsRow>
         <SettingsRow v-if="LOCALES.length > 1" :icon="Languages" :label="t('settings.displayLanguage')" :description="isMachineDraft(currentLocale) ? t('settings.languageReview') : undefined">
           <template #control>
             <Select v-model="currentLocale">
@@ -345,46 +331,6 @@ async function save() {
             <InfoHint><span v-html="t('settings.linkHostHelp')" /></InfoHint>
           </div>
           <Input id="sd-link-host" v-model="linkHost" variant="mono" :placeholder="t('settings.linkHostPlaceholder')" />
-        </div>
-      </SettingsGroup>
-      <!-- Project scanning (folded in from the old Projects tab) -->
-      <SettingsGroup :label="t('settings.projectScanning')">
-        <SettingsRow :icon="Search" :label="t('settings.autoScan')">
-          <template #info><InfoHint>{{ t('settings.autoScanHint') }}</InfoHint></template>
-          <template #control><Switch id="sd-auto-scan" v-model="autoScan" /></template>
-        </SettingsRow>
-        <div class="px-3.5 py-2.5">
-          <div class="mb-2 flex items-center gap-1.5">
-            <FolderX class="size-4.5 shrink-0 text-muted-foreground" />
-            <span class="text-sm">{{ t("settings.skipSystem") }}</span>
-            <InfoHint>{{ t("settings.skipSystemHelp") }}</InfoHint>
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <label
-              v-for="g in skipGroups"
-              :key="g.key"
-              :for="`sd-skip-${g.key}`"
-              class="flex cursor-pointer items-center gap-2 rounded-md border border-border bg-muted/30 px-2.5 py-1.5 text-sm transition-colors hover:bg-muted/60"
-            >
-              <Switch :id="`sd-skip-${g.key}`" v-model="g.model.value" />
-              {{ g.label }}
-            </label>
-          </div>
-        </div>
-        <div class="px-3.5 py-2.5">
-          <div class="mb-1.5 flex items-center gap-1.5">
-            <FilterX class="size-4.5 shrink-0 text-muted-foreground" />
-            <Label for="sd-exclude"><span class="text-sm font-normal">{{ t("settings.alsoExclude") }}</span></Label>
-            <InfoHint><span v-html="t('settings.alsoExcludeHelp')" /></InfoHint>
-          </div>
-          <Textarea
-            id="sd-exclude"
-            v-model="excludeText"
-            rows="3"
-            variant="mono"
-            text-size="xs"
-            :placeholder="t('settings.excludePlaceholder')"
-          />
         </div>
       </SettingsGroup>
       </div>

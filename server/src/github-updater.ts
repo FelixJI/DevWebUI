@@ -1,6 +1,6 @@
 /** GitHub Releases updater for the compiled distribution; archives are the updater contract. */
 import { spawn } from "node:child_process";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import {
   cpSync,
   existsSync,
@@ -13,25 +13,13 @@ import {
 import { basename, dirname, join } from "node:path";
 import pkg from "../../package.json";
 import type { UpdateApplyResult, UpdateStatus } from "../../shared/dto";
-import { readSettings, writeSettings } from "./runtime";
+import { readSettings } from "./runtime";
 
 const SERVICE = "devwebui" as const;
-const REPO = "LunarWerxs/DevWebUI";
+// This build is the FelixJI privacy fork: updates come from ITS releases only, never from
+// upstream LunarWerxs/DevWebUI (and never from any vendor proxy — no install ping exists).
+const REPO = "FelixJI/DevWebUI";
 const RELEASES_PAGE = `https://github.com/${REPO}/releases`;
-// Studio's install-ping endpoint returns the SAME GitHub releases/latest JSON verbatim (it's a
-// passthrough proxy), so hitting it here doubles as both the update check AND the one anonymous
-// "an install exists" signal — no separate network call for the ping. See latestRelease() below.
-const LATEST_API = "https://studio.connectionsapi.com/v1/app/devwebui/latest";
-/**
- * Resilience fallback, used only when the Studio proxy above fails (see latestRelease).
- * GitHub's own releases/latest is the right backstop precisely because it is the one URL here
- * a rename cannot orphan: GitHub redirects both owner and repo renames.
- *
- * Why this exists (YTSort, 2026-08): a shipped artifact whose only update URL later stopped
- * resolving left every install silently polling a dead link for six months, with no signal to
- * the users or the maintainer. One hardcoded endpoint and no second opinion is that same
- * failure waiting to happen.
- */
 const GITHUB_LATEST_API = `https://api.github.com/repos/${REPO}/releases/latest`;
 /** Recent releases, newest first: walked only when the update cooldown holds back the latest one. */
 const GITHUB_RELEASES_API = `https://api.github.com/repos/${REPO}/releases?per_page=30`;
@@ -126,109 +114,21 @@ function baseStatus(overrides: Partial<UpdateStatus>): UpdateStatus {
   };
 }
 
-/** Coarse OS family for the ping's `os` query param — no version/build number, just windows/macos/linux. */
-function pingOsTag(platform: NodeJS.Platform = process.platform): string {
-  return platform === "win32" ? "windows" : platform === "darwin" ? "macos" : "linux";
-}
-
 /**
- * True when the anonymous install ping should be suppressed. The underlying fetch still runs
- * either way (it's the real update check) — this only decides whether it carries identity.
- * DEVWEBUI_NO_PING is the documented opt-out; DEVWEBUI_PULSE_DISABLE / CONNECTIONS_PULSE_DISABLE
- * are honored too since the README already told users those turn telemetry off. Dev/test/CI runs
- * are never worth counting as an install: NODE_ENV=test covers `bun test`, CI covers GitHub
- * Actions, and DEVWEBUI_PORT_FIXED=1 is the flag `bun run dev` (server/src/dev.ts) already sets
- * on itself for an unrelated reason (pinning the daemon's port) — reused here rather than adding
- * a second dev-mode flag.
+ * The newest release, straight from this fork's GitHub Releases. Carries no install id and no
+ * version/os telemetry: a plain unauthenticated read, well inside GitHub's anonymous rate limit.
+ * (The upstream install ping is removed in this fork — see CHANGELOG.)
  */
-function pingSuppressed(): boolean {
-  return (
-    process.env.DEVWEBUI_NO_PING === "1" ||
-    process.env.DEVWEBUI_PULSE_DISABLE === "1" ||
-    process.env.CONNECTIONS_PULSE_DISABLE === "1" ||
-    process.env.NODE_ENV === "test" ||
-    !!process.env.CI ||
-    process.env.DEVWEBUI_PORT_FIXED === "1"
-  );
-}
-
-/** Get (or lazily mint + persist) this install's anonymous ping id — reusing whatever the
- *  retired product-pulse attempt already generated (settings.json's pulseInstallId, itself
- *  migrated from an even older analyticsInstallId) so an existing install keeps counting as
- *  one install rather than minting a second id. */
-function pingInstallId(): string {
-  const existing = readSettings().pulseInstallId;
-  if (existing) return existing;
-  const fresh = randomUUID();
-  writeSettings({ pulseInstallId: fresh });
-  return fresh;
-}
-
-/**
- * Ask GitHub directly after the Studio proxy failed. Carries no install id and no version/os
- * telemetry: a plain unauthenticated read, well inside GitHub's anonymous rate limit.
- *
- * If this fails too, the ORIGINAL failure is reported. The primary endpoint is the one an
- * operator needs to hear about; leading with "GitHub said 403" would send them chasing the
- * backstop instead of the thing that actually broke.
- */
-async function githubFallbackRelease(
-  common: Record<string, string>,
-  primaryError: unknown,
-  primaryStatus: number | undefined,
-): Promise<Release> {
-  let fallback: Response;
-  try {
-    fallback = await fetch(GITHUB_LATEST_API, {
-      headers: common,
-      signal: AbortSignal.timeout(5_000),
-    });
-  } catch (error) {
-    throw primaryError ?? error;
-  }
-  if (!fallback.ok) {
-    if (primaryError) throw primaryError;
-    throw new Error(
-      `release check returned HTTP ${primaryStatus} (GitHub fallback: HTTP ${fallback.status})`,
-    );
-  }
-  return (await fallback.json()) as Release;
-}
-
 async function latestRelease(): Promise<Release> {
-  const suppressed = pingSuppressed();
-  const url = new URL(LATEST_API);
-  let installId: string | null = null;
-  if (!suppressed) {
-    installId = pingInstallId();
-    url.searchParams.set("v", VERSION);
-    url.searchParams.set("os", pingOsTag());
-    // First-ever successful ping for this install only — see the write-back below.
-    if (!readSettings().pulseInstallReported) url.searchParams.set("new", "1");
+  const response = await fetch(GITHUB_LATEST_API, {
+    headers: { accept: "application/vnd.github+json", "user-agent": `${SERVICE}/${VERSION}` },
+    // Fire-and-forget contract: never let a stalled network hang the update check indefinitely.
+    signal: AbortSignal.timeout(5_000),
+  });
+  if (!response.ok) {
+    throw new Error(`release check returned HTTP ${response.status}`);
   }
-  const common = {
-    accept: "application/vnd.github+json",
-    "user-agent": `${SERVICE}/${VERSION}`,
-  };
-  let response: Response | null = null;
-  let primaryError: unknown = null;
-  try {
-    response = await fetch(url, {
-      headers: { ...common, ...(installId ? { "X-Install-Id": installId } : {}) },
-      // Fire-and-forget contract: never let a stalled network hang the update check indefinitely.
-      signal: AbortSignal.timeout(5_000),
-    });
-  } catch (error) {
-    primaryError = error;
-  }
-  if (!response?.ok) return await githubFallbackRelease(common, primaryError, response?.status);
-  const release = (await response.json()) as Release;
-  // Persist "reported" only after a confirmed successful ping, so a failed/suppressed attempt
-  // still sends &new=1 next time instead of silently under-counting the install. A release that
-  // came from the GitHub fallback never reaches here, which is correct: Studio never saw it.
-  if (installId && !readSettings().pulseInstallReported)
-    writeSettings({ pulseInstallReported: true });
-  return release;
+  return (await response.json()) as Release;
 }
 
 // Update cooldown, an idea from oh-my-zsh's `zstyle ':omz:update' cooldown N` (tools/upgrade.sh, MIT): adopt only

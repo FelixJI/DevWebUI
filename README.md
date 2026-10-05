@@ -11,11 +11,10 @@ Run every dev server from one pane: click to start, stop and restart, and watch 
 memory and logs. Then let your AI agents drive the **same** daemon over MCP.<br/>
 No more `bun run dev` babysitting across a dozen terminal tabs.
 
-[**Website**](https://devwebui.github.io) · [Quick start](#quick-start) · [`.devwebui` files](#devwebui-files) · [MCP](#drive-it-from-an-ai-agent-mcp) · [Changelog](CHANGELOG.md)
+[**Upstream website**](https://devwebui.github.io) · [Quick start](#quick-start) · [`.devwebui` files](#devwebui-files) · [MCP](#drive-it-from-an-ai-agent-mcp) · [Changelog](CHANGELOG.md)
 
-[![Website](https://img.shields.io/badge/website-devwebui.github.io-6366f1?style=flat-square)](https://devwebui.github.io)
+[![Release](https://img.shields.io/github/v/release/FelixJI/DevWebUI?style=flat-square&color=6366f1)](https://github.com/FelixJI/DevWebUI/releases)
 [![CI](https://img.shields.io/github/actions/workflow/status/LunarWerxs/devwebui/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/LunarWerxs/devwebui/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/LunarWerxs/devwebui?style=flat-square&color=6366f1)](https://github.com/LunarWerxs/devwebui/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-join_the_community-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/PsWpeNUzhk)
 
@@ -50,7 +49,7 @@ automate, and everyone works off a single source of truth.
 ## Quick start
 
 **Prebuilt Windows app**: download `devwebui-windows-x64.exe` from
-[Releases](https://github.com/LunarWerxs/DevWebUI/releases) and run it directly. It is an
+[Releases](https://github.com/FelixJI/DevWebUI/releases) and run it directly. It is an
 icon-bearing GUI executable with the dashboard embedded and no console window or sidecar folders.
 The plain ZIP beside it is reserved for automatic updates. To adopt only releases that have been
 public for a while, set **Settings -> App updates -> Update cooldown** to a number of days: a
@@ -76,10 +75,10 @@ bun install
 bun run dev      # daemon on :4000  +  GUI on http://localhost:4010
 ```
 
-On its first launch DevWebUI scans once for [`.devwebui` files](#devwebui-files) and recognizable
-dev-script projects. After that, startup scanning stays off unless you enable it in Settings; use
-**Add project**, drop a folder or `.devwebui` file onto the Windows launcher, or run
-`devwebui open <path>` whenever you want to register something new. Want a dependency-free sample?
+On its first launch DevWebUI shows an empty dashboard: **it never scans your disks** (see
+[Local-first](#local-first)). Use **Add project**, drop a folder or `.devwebui` file onto the
+Windows launcher, or run `devwebui open <path>` whenever you want to register something new —
+those read only the folder you point at. Want a dependency-free sample?
 Add `server/examples/extra.devwebui`. The GUI and API share one port (default `4000`); if it's
 taken, the daemon hops to the next free one and opens the URL it actually bound.
 
@@ -93,7 +92,8 @@ taken, the daemon hops to the next free one and opens the URL it actually bound.
 - **Persistent error log**: de-duplicated stderr / crashes / error-looking stdout that survives restarts. Every `file:line:col` in it is a link that opens that line in the editor you already have running (VS Code and its forks, JetBrains IDEs, Zed, Sublime Text, Notepad++); set `DEVWEBUI_EDITOR` to the editor's executable to pick one explicitly.
 - **Desktop shortcuts (Windows)**: send any server (or a whole repo) to your Desktop from the ⋮ menu; double-click starts it, linked servers and all, in a small window with a Stop button.
 - **Built for agents**: a full set of MCP tools drives the same daemon you click, off one shared state.
-- **Localized & themed**: full i18n (English base; [add a language](web/src/i18n/README.md)), light/dark.
+- **Localized & themed**: full i18n — English, 简体中文, 繁體中文, 日本語, Español, Deutsch,
+  Français ([add a language](web/src/i18n/README.md)); light/dark that follows your OS by default.
 - **Lives in your tray**: a Windows tray app runs the daemon hidden; Open / Rebuild / Restart / Quit.
 
 <table>
@@ -111,7 +111,7 @@ taken, the daemon hops to the next free one and opens the URL it actually bound.
   </tr>
 </table>
 
-<p align="center"><sub>Dark by default, a light theme ships too.</sub></p>
+<p align="center"><sub>Follows your OS light/dark setting by default; light and dark themes both ship.</sub></p>
 <p align="center"><img src="docs/light.png" alt="DevWebUI in its light theme" width="820" /></p>
 
 ## `.devwebui` files
@@ -208,45 +208,52 @@ Reka UI, Tailwind v4 (zinc + indigo, light/dark). See the [changelog](CHANGELOG.
 
 ## Local-first
 
-DevWebUI runs entirely on your machine: a single daemon on your localhost, open source under the
-[MIT License](LICENSE). Core functionality needs no account and no cloud. Two optional extras:
+This is the **FelixJI privacy fork** of [LunarWerxs/DevWebUI](https://github.com/LunarWerxs/DevWebUI)
+(MIT). It runs entirely on your machine: a single daemon on your localhost, open source under the
+[MIT License](LICENSE). Core functionality needs no account and no cloud. Compared to upstream,
+this fork removes two things a privacy audit flagged:
+
+- **No install ping — at all.** Upstream's update check went through a vendor proxy
+  (`studio.connectionsapi.com`) carrying a per-install id, version, and OS family, and even the
+  documented opt-out only stripped the identity while the request still fired. This fork's update
+  check is a plain unauthenticated read of THIS repo's GitHub Releases
+  (`api.github.com/repos/FelixJI/DevWebUI`); nothing else is contacted, no id exists, and a
+  regression test fails the build if the check ever reaches for any non-GitHub host.
+- **No machine-wide disk scan — at all.** Upstream swept your home directory plus every fixed
+  drive on first launch and offered a whole-machine "Scan for projects". This fork removed the
+  default roots, the startup/quick/deep presets and every scan setting: the daemon's scan API
+  requires explicit folder paths and refuses anything else. What remains reads exactly the
+  folder you name, drop, or paste — nothing walks your drives on its own.
+
+One optional extra remains (off by default, unchanged from upstream):
 
 - **Settings sync**: sign in with a LunarWerx Connections account to sync a small allowlist of
   portable prefs + theme across machines. Off by default; only runs after you explicitly enable it
   in Settings, and `@cnct/connect` (the SDK it needs, which also ships the settings-store locker
-  client) is an optional dependency that is installed but never imported or initialized unless
-  you do.
-- **Anonymous install ping**: the update check (`GET /api/updates`, cached 5 minutes, fired when
-  the GUI loads or on the opt-in auto-update timer) is answered by an install counter at
-  `studio.connections.icu` that proxies GitHub's own releases feed, and the request carries a
-  random per-install id plus your app version and OS family (Windows / macOS / Linux) so we know
-  roughly how many installs exist. From that request, the server also derives and stores a coarse
-  location (country, region, city, timezone), your network's ASN, locale, and a truncated user
-  agent, but never an IP address. No hostname, username, path, or account info is ever sent. The
-  request also fails silently and never blocks anything if it can't reach the network. Set
-  `DEVWEBUI_NO_PING=1` to turn it off (the older `DEVWEBUI_PULSE_DISABLE=1` /
-  `CONNECTIONS_PULSE_DISABLE=1` still work too); it's already off automatically in dev/test/CI
-  runs.
+  client) is an optional dependency that is installed but never imported or initialized unless you
+  do. Delete the Cloud sync section of the UI along with `server/src/connections.ts` if you'd
+  rather not ship it at all.
 
 ## FAQ
 
 **Is DevWebUI free?**
 Yes. DevWebUI is open source under the MIT License, and core functionality, starting, stopping,
 and monitoring your dev servers from the GUI or over MCP, needs no account and no cloud. The only
-optional extras are cross-machine settings sync, off unless you enable it, and an anonymous install
-ping for update checks, on unless you set `DEVWEBUI_NO_PING=1`.
+optional extra is cross-machine settings sync, off unless you enable it. There is no telemetry:
+no install ping, no crash reporting, no analytics (this fork removed upstream's install ping
+entirely — see [Local-first](#local-first)).
 
 **Does it work offline?**
 Yes. The daemon and GUI run entirely on your local machine, and starting, stopping, and monitoring
 dev servers works with no network connection at all. The only features that reach the internet are
-optional: settings sync (off by default) and a lightweight install ping used for update checks,
-which you can disable with `DEVWEBUI_NO_PING=1`.
+optional: settings sync (off by default) and the update check against this repo's GitHub Releases.
 
 **Is my data sent anywhere?**
 No project data, commands, logs, or file paths leave your machine. If you enable it, settings sync
-shares a small allowlist of prefs and theme via a LunarWerx Connections account. A separate
-anonymous install ping (disable with `DEVWEBUI_NO_PING=1`) sends a random install id, app version,
-and OS family, but never your IP address, hostname, username, or file paths.
+shares a small allowlist of prefs and theme via a LunarWerx Connections account. The update check
+reaches only `api.github.com`, sends no identifiers, and can be turned off in Settings → App
+updates. The app never scans your disks: folder reads happen only for paths you explicitly add,
+drop, or paste.
 
 **What are the system requirements?**
 On Windows, download the prebuilt `devwebui-windows-x64.exe` and run it directly, no dependencies.
@@ -276,8 +283,8 @@ also start quietly on purpose with `devwebui --safe-mode` (or `DEVWEBUI_SAFE_MOD
 
 **How do I add a project?**
 Drop a `.devwebui` file (one per repo, listing its dev servers) in the repo root and click **Add
-project** in the GUI, or run `devwebui open <path>` from the CLI. On first launch DevWebUI also
-scans once for `.devwebui` files and recognizable dev-script projects automatically.
+project** in the GUI, or run `devwebui open <path>` from the CLI. Nothing is ever discovered by
+scanning: DevWebUI reads only the folder or file you point it at.
 
 **Can I use DevWebUI without the GUI?**
 Yes. The `devwebui` CLI is a thin client over the same REST API the GUI and MCP server use:

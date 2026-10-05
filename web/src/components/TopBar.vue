@@ -49,16 +49,16 @@ import { useRunAction } from "@/lib/useAction";
 import type { ProcessView, StatusBucket, ViewMode } from "@/types";
 
 const props = defineProps<{ connected: boolean; processes: ProcessView[]; busy?: boolean }>();
-const emit = defineEmits<{ add: []; notifications: []; settings: []; scan: [] }>();
+const emit = defineEmits<{ add: []; notifications: []; settings: [] }>();
 
 const { t } = useI18n({ useScope: "global" });
 const { enabled: tooltipsEnabled } = useTooltipConfig();
 const store = useAppStore();
-const { errors, viewMode, statusFilter, unreadNotifications, searchQuery } = storeToRefs(store);
+const { errors, viewMode, statusFilter, searchQuery } = storeToRefs(store);
 const running = computed(() => props.processes.filter((p) => p.status === "running").length);
 const errorCount = computed(() => errors.value.length);
-// Bell badge: errors + unread notifications; red when there are errors, else accent.
-const bellCount = computed(() => errorCount.value + unreadNotifications.value);
+// Bell badge: recorded errors; red when there are any.
+const bellCount = computed(() => errorCount.value);
 
 // Filters live in a modal now (opened from the ⋮ menu) rather than the toolbar.
 const filtersOpen = ref(false);
@@ -307,9 +307,6 @@ async function updateApp() {
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />
-            <DropdownMenuItem @select="emit('scan')">
-              <Search class="size-4" /> {{ t("actions.scan") }}
-            </DropdownMenuItem>
             <DropdownMenuItem variant="destructive" :disabled="shuttingDown" @select="onShutdownClick">
               <Power class="size-4" /> {{ t("actions.shutdown") }}
             </DropdownMenuItem>

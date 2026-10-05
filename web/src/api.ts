@@ -271,17 +271,16 @@ export const browseForFolder = () =>
     method: "POST",
   });
 
-/** Fast, bounded sweep of the machine for existing .devwebui files. */
-export const scanForDevWebUI = (
-  opts: {
-    roots?: string[];
-    preset?: ScanPreset;
-    maxDepth?: number;
-    limit?: number;
-    budgetMs?: number;
-    detectPackages?: boolean;
-  } = {},
-) => reqJson<ScanResult>(ROUTES.projectsScan, jsonInit("POST", opts));
+/** Bounded scan of EXPLICITLY named folders (dropped/pasted paths). No machine-wide sweep:
+ *  roots are required, and the daemon refuses a scan without them. */
+export const scanForDevWebUI = (opts: {
+  roots: string[];
+  preset?: ScanPreset;
+  maxDepth?: number;
+  limit?: number;
+  budgetMs?: number;
+  detectPackages?: boolean;
+}) => reqJson<ScanResult>(ROUTES.projectsScan, jsonInit("POST", opts));
 
 /** A sensible default clone destination from the daemon (`~/dev`). */
 export async function suggestDest(): Promise<string> {

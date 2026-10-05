@@ -54,27 +54,15 @@ const OAUTH = {
 /**
  * The ONLY settings keys that sync — portable UI/behaviour prefs.
  *
- * Widened 2026-08-25 from four keys to thirteen. The old list excluded the scan-skip settings as
- * "machine/OS-specific", which reads right and is backwards: `skipMac` only ever DOES anything on
- * a Mac, so carrying it from the desktop where you set it to the Mac where it applies is the
- * entire point. The exclusions that survived are the ones with a mechanism behind them, listed in
+ * (This fork narrowed the list again when the scan-skip settings were removed along with
+ * machine-wide scanning.) The exclusions that survived are the ones with a mechanism behind
+ * them, listed in
  * [`NEVER_SYNCED`] below with their reasons.
  */
 const PREF_KEYS = [
   "runtime",
   "freePortOnStart",
   "monitorResources",
-  "autoScan",
-  // Scan policy. Each `skip*` flag is inert on the operating systems it does not name, so these
-  // travel to the machine where they matter instead of being re-set there by hand.
-  "skipWindows",
-  "skipMac",
-  "skipLinux",
-  "osSkip",
-  // The curated exclude list. It mixes folder NAMES (portable) with absolute paths (not), and
-  // that is fine: a path that does not exist on this machine simply never matches anything, so
-  // the worst case is a dead entry, against the real cost of rebuilding the list per machine.
-  "scanExclude",
   // Update preferences, minus the one that acts on its own — see NEVER_SYNCED.
   "updateNotify",
   "autoUpdateIntervalSecs",
@@ -100,12 +88,6 @@ const NEVER_SYNCED = [
   // every server, or updating and relaunching itself, without being told to here.
   "autoStartOnLaunch",
   "autoUpdate",
-  // A per-machine latch: the one-time first-launch scan. Syncing a `true` would suppress that
-  // first scan on a machine that has never run one.
-  "firstScanDone",
-  // Per-install identity for the update ping. Syncing it would merge two installs into one.
-  "pulseInstallId",
-  "pulseInstallReported",
 ] as const satisfies readonly (keyof Settings)[];
 
 /**

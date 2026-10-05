@@ -168,7 +168,7 @@ if (IS_RELAUNCH) await waitForPortFree(DESIRED_PORT, 8000);
 const PORT =
   process.env.DEVWEBUI_PORT_FIXED === "1" ? DESIRED_PORT : await findFreePort(DESIRED_PORT);
 
-materializeSettings(); // write the full settings file (incl. editable osSkip lists) on first run
+materializeSettings(); // write the full default settings file on first run
 const manager = new Manager();
 liveManager = manager; // arm the crash handlers registered above
 const startupSettings = readSettings();

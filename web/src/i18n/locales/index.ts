@@ -11,7 +11,7 @@
  */
 
 /** Every shipped locale code. Extend this union when you add a language. */
-export type LocaleCode = "en";
+export type LocaleCode = "en" | "zh-CN" | "zh-TW" | "ja" | "es" | "de" | "fr";
 
 export interface LocaleMeta {
   code: LocaleCode;
@@ -31,6 +31,22 @@ export interface LocaleMeta {
 
 export const LOCALES: LocaleMeta[] = [
   { code: "en", endonym: "English", englishName: "English", status: "source" },
+  {
+    code: "zh-CN",
+    endonym: "简体中文",
+    englishName: "Chinese (Simplified)",
+    status: "machine-draft",
+  },
+  {
+    code: "zh-TW",
+    endonym: "繁體中文",
+    englishName: "Chinese (Traditional)",
+    status: "machine-draft",
+  },
+  { code: "ja", endonym: "日本語", englishName: "Japanese", status: "machine-draft" },
+  { code: "es", endonym: "Español", englishName: "Spanish", status: "machine-draft" },
+  { code: "de", endonym: "Deutsch", englishName: "German", status: "machine-draft" },
+  { code: "fr", endonym: "Français", englishName: "French", status: "machine-draft" },
 ];
 
 export const DEFAULT_LOCALE: LocaleCode = "en";

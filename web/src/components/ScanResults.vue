@@ -10,9 +10,8 @@ const { t } = useI18n({ useScope: "global" });
 
 const props = defineProps<{
   result: ScanResult;
-  deepening?: boolean; // tier-1 results shown; tier-2 deep sweep still running
   busy?: boolean;
-  compact?: boolean; // shorter list (inline in the add form vs. the focused scan view)
+  compact?: boolean; // shorter list (inline in the add form)
   ignoredPaths?: string[]; // absolute dirs the user dismissed
   showIgnored?: boolean; // reveal (dimmed) the ignored ones instead of hiding them
 }>();
@@ -36,7 +35,6 @@ const total = computed(() => props.result.files.length + detected.value.length);
   <div class="min-w-0 rounded-xl border border-border bg-muted/30 p-2">
     <p class="px-1 pb-1 text-xs text-muted-foreground">
       {{ t("scanResults.summary", { count: total + (result.truncated ? "+" : ""), ms: result.ms, dirs: result.scannedDirs }) }}{{ result.timedOut ? " " + t("scanResults.stoppedEarly") : "" }}
-      <span v-if="deepening" class="text-primary">{{ t("scanResults.stillScanning") }}</span>
     </p>
     <!-- overflow-y-auto (NOT overflow-auto): a horizontal scroll container would
          give every row unbounded width, so the path <code> never truncates and

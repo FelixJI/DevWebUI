@@ -1,4 +1,4 @@
-import type { LogLine, ScanResult } from "../../shared/dto";
+import type { LogLine } from "../../shared/dto";
 
 // Cross-boundary DTOs are defined once in the shared module and re-exported here
 // so existing `import { ProcessView } from "@/types"` call sites keep working.
@@ -27,19 +27,6 @@ export type ViewMode = "cards" | "table";
  */
 export interface LogEntry extends LogLine {
   seq: number;
-}
-
-/** An in-app notification (currently: the startup scan found new projects). */
-export interface AppNotification {
-  id: string;
-  kind: "scan";
-  /** Optional override; "scan" notifications derive their title/body from `scan`. */
-  title?: string;
-  body?: string;
-  ts: number;
-  read: boolean;
-  /** For a "scan" notification: the fresh files, fed straight into the Add dialog. */
-  scan?: ScanResult;
 }
 
 /** Column a process list is ordered by. */

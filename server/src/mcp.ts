@@ -247,36 +247,34 @@ const TOOLS: McpEngineTool[] = [
   {
     name: "scan_projects",
     description:
-      "Sweep the machine for existing .devwebui files (and, with detectPackages, folders whose dev scripts could become one). Returns found files + detected folders; loads nothing. `preset`: startup | quick | deep | scoped.",
-    inputSchema: S({
-      roots: {
-        type: "array",
-        items: { type: "string" },
-        description: "Absolute dirs to scan (optional; defaults to sensible roots).",
+      "Scan the EXACT folders you name (recursive, bounded) for existing .devwebui files and, with detectPackages, folders whose dev scripts could become one. Returns found files + detected folders; loads nothing. This build has no machine-wide sweep: `roots` is required.",
+    inputSchema: S(
+      {
+        roots: {
+          type: "array",
+          items: { type: "string" },
+          description: "Absolute dirs to scan (REQUIRED — there is no machine-wide default).",
+        },
+        detectPackages: {
+          type: "boolean",
+          description: "Also detect package.json dev scripts as candidate projects (optional).",
+        },
+        maxDepth: {
+          type: "number",
+          description: "Directory depth cap (optional; the scoped preset uses 16).",
+        },
+        limit: { type: "number", description: "Max results before truncating (optional)." },
+        budgetMs: { type: "number", description: "Time budget in milliseconds (optional)." },
       },
-      preset: {
-        type: "string",
-        enum: ["startup", "quick", "deep", "scoped"],
-        description: "Server-owned scan profile (optional).",
-      },
-      detectPackages: {
-        type: "boolean",
-        description: "Also detect package.json dev scripts as candidate projects (optional).",
-      },
-      maxDepth: {
-        type: "number",
-        description: "Override the preset's directory depth (optional).",
-      },
-      limit: { type: "number", description: "Max results before truncating (optional)." },
-      budgetMs: { type: "number", description: "Time budget in milliseconds (optional)." },
-    }),
+      ["roots"],
+    ),
     run: (a) =>
       api(ROUTES.projectsScan, {
         method: "POST",
         headers: JSON_HEADERS,
         body: JSON.stringify({
           roots: a.roots,
-          preset: a.preset,
+          preset: "scoped",
           detectPackages: a.detectPackages,
           maxDepth: a.maxDepth,
           limit: a.limit,
