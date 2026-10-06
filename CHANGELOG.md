@@ -4,6 +4,40 @@ All notable changes to DevWebUI are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-10-06
+
+**Tray Quit is a full exit, and double-clicking a running app asks what you meant.**
+The tray host is rebuilt from a now-diverged copy of the kit's Rust source (see the
+fork note in `misc/tray-host-native/README.md`); re-syncing from the kit will conflict.
+
+### Fixed
+
+- **Tray Quit leaves nothing behind.** In the common compiled-exe flow (double-click
+  the exe → the daemon starts → the daemon starts the tray), the tray was ATTACHED to
+  a daemon it never spawned, and Quit neither asked that daemon to stop nor killed
+  it: the icon vanished and the daemon ran on forever. Quit now sends every live
+  daemon a graceful shutdown request first (an attached daemon gets the token-less
+  ui-source request it honours, so managed dev servers stop cleanly and the crash
+  sentinel is disarmed), force-kills the port owners as a backstop regardless of
+  ownership, re-removes the full-shutdown sentinel the attached daemon writes on its
+  way out (a leftover made the NEXT tray quit 500 ms after starting), and closes the
+  portable app window — which is deliberately outside the daemon's process tree, so
+  no tree-kill could ever reach it. The web UI's "Shut down" and `devwebui stop`
+  ride the same teardown and are full exits too, window included.
+
+### Added
+
+- **Second-instance chooser page.** Double-clicking the exe while a daemon is
+  already serving used to silently open the existing UI and exit — right when you
+  wanted that, opaque when you double-clicked because the app felt wedged. It now
+  opens a small local page: *Open existing UI* (the old behaviour) or *Restart
+  DevWebUI* (the old stack tears down gracefully, tray included, and this process
+  boots as the replacement on the same port, then opens its window). An ignored or
+  closed tab falls back to opening the existing UI after five minutes. The page is
+  bilingual (follows the browser language), served by a one-shot loopback server
+  inside the second instance; dev runs, `devwebui start` and the auto-update
+  hand-off are unchanged.
+
 ## [1.2.0] - 2026-10-05
 
 **First release of the FelixJI privacy fork.** Based on upstream

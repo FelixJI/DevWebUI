@@ -1,5 +1,15 @@
 # lunarwerx-tray (spike)
 
+> **FORK NOTE (FelixJI/DevWebUI, v1.2.0+, 2026-10):** this copy has DIVERGED from the LunarWerx
+> kit. `quit_app` was reworked so tray Quit is a FULL exit in this fork: an ATTACHED daemon (one
+> the tray did not spawn — the common double-clicked-exe flow) is now asked to shut down via the
+> token-less ui-source request and force-killed as a backstop, the full-shutdown sentinel is
+> re-removed after the stop, and `browser::kill_portable_windows` closes the portable window
+> (outside the daemon's tree by design, so nothing else reaches it). Re-syncing from the kit will
+> conflict on `src/main.rs` and `src/browser.rs`; re-apply this behaviour or drop it deliberately.
+> Rebuild with `cargo build --release` and copy `target/release/lunarwerx-tray.exe` over
+> `misc/lunarwerx-tray.exe` (end the running host first — Windows locks a running image).
+
 A native Windows tray host, built to answer one question: **how much of an app's launch time is the
 PowerShell tray host itself?**
 

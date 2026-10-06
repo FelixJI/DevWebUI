@@ -8,7 +8,11 @@
 use crate::config::Config;
 use crate::json::Json;
 use crate::win::{shell_open, shell_open_with};
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 pub struct Placement {
     pub width: i32,
@@ -169,6 +173,52 @@ pub fn open_ui(cfg: &Config, url: &str) {
     shell_open_with(&browser, &args);
 }
 
+/// The command line that kills every Chromium process carrying THIS app's portable profile, as
+/// argv for a direct `Command::new(argv[0]).args(&argv[1..])` — never a shell string. Pure and
+/// exported so the quoting (the whole correctness question, as ever with a filter interpolated
+/// at runtime) is unit-testable without spawning anything.
+///
+/// Only the profile DIRECTORY is matched, never a PID we once knew: the window processes are
+/// born outside our tree and unnamed to us, but every one of them carries
+/// `--user-data-dir=<portable-profile>` on its own command line, which is the one mark that
+/// distinguishes this app's windows from the user's everyday browser.
+pub fn kill_portable_argv(profile_dir: &str) -> Vec<String> {
+    // A PowerShell single-quoted literal: backslashes need nothing, a literal ' escapes as ''.
+    let literal = profile_dir.replace('\'', "''");
+    vec![
+        "powershell".into(),
+        "-NoProfile".into(),
+        "-NonInteractive".into(),
+        "-Command".into(),
+        format!(
+            "Get-CimInstance Win32_Process -Filter \"Name='msedge.exe' OR Name='chrome.exe'\" | \
+             Where-Object {{ $_.CommandLine -like '*{literal}*' }} | \
+             ForEach-Object {{ taskkill /PID $_.ProcessId /T /F }}"
+        ),
+    ]
+}
+
+/// Kill every portable app window still holding our dedicated profile. A full Quit must reach
+/// the window too, and nothing else can: it is deliberately outside the daemon's process tree
+/// (see the daemon-side portable-window header), so tree-killing the daemon reaches nothing and
+/// the daemon itself never closes it. Fire-and-forget by design — the query and the kills run
+/// inside one PowerShell process that outlives us by a moment, because Quit must not block on a
+/// process-table scan. Best-effort throughout: with no window open the query simply matches
+/// nothing, and a non-portable setup has no process carrying the profile at all.
+pub fn kill_portable_windows(cfg: &Config) {
+    let Some(dir) = cfg.info_file.parent() else {
+        return;
+    };
+    let argv = kill_portable_argv(&dir.join("portable-profile").display().to_string());
+    let _ = Command::new(&argv[0])
+        .args(&argv[1..])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -276,5 +326,28 @@ mod tests {
         assert!(remembered_placement(&dir, "http://127.0.0.1:7787/").is_none());
         write_prefs(&dir, "not json at all");
         assert!(remembered_placement(&dir, "http://127.0.0.1:7787/").is_none());
+    }
+
+    #[test]
+    fn kill_argv_matches_the_profile_in_a_quoted_literal() {
+        let argv = kill_portable_argv(r"C:\Users\Felix .devwebui\portable-profile");
+        assert_eq!(&argv[..4], &["powershell", "-NoProfile", "-NonInteractive", "-Command"]);
+        // One -Command element, so spaces in the profile need no shell quoting of their own.
+        assert_eq!(argv.len(), 5);
+        let cmd = &argv[4];
+        assert!(cmd.contains("Name='msedge.exe' OR Name='chrome.exe'"));
+        assert!(cmd.contains("-like '*C:\\Users\\Felix .devwebui\\portable-profile*'"));
+        assert!(cmd.contains("taskkill /PID $_.ProcessId /T /F"));
+    }
+
+    #[test]
+    fn kill_argv_escapes_a_single_quote_in_the_profile_path() {
+        // A PowerShell single-quoted literal escapes ' as '' — anything less would close the
+        // string and leave the rest of the path as bare tokens.
+        let cmd = &kill_portable_argv(r"C:\Users\O'Brien\.devwebui\portable-profile")[4];
+        assert!(cmd.contains("-like '*C:\\Users\\O''Brien\\.devwebui\\portable-profile*'"));
+        // The unescaped form is gone: exactly one quote between O and Brien would mean the
+        // literal closed early and the rest of the path is bare tokens.
+        assert!(!cmd.contains("O'B"));
     }
 }

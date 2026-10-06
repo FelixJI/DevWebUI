@@ -698,9 +698,21 @@ fn quit_app(hwnd: HWND) {
 
     // A short graceful POST first, so a daemon that can close cleanly does. Bounded at 3s: Quit
     // must never feel like a hang, and the force-kill below is the guaranteed backstop.
-    if use_token && owned {
+    //
+    // An ATTACHED daemon (one we did not spawn — the common compiled-exe flow, where the exe
+    // boots the daemon and the daemon then starts us) never saw our token, so the owned-only
+    // request used to skip it and Quit left it running forever. The request always carries the
+    // `shutdown-source: ui` header, which the daemon honours token-less, so an attached daemon
+    // gets asked with an EMPTY token and still shuts down cleanly. (This fork's Quit is a FULL
+    // exit; the kit's "only ever act on a daemon we own" would leave that daemon running.)
+    if use_token {
         if let Some(url) = get_url() {
-            daemon::request_shutdown(&a.cfg, &url, &a.token, Duration::from_secs(3));
+            daemon::request_shutdown(
+                &a.cfg,
+                &url,
+                if owned { a.token.as_str() } else { "" },
+                Duration::from_secs(3),
+            );
         }
     }
     // Reap anything a worker spawned before killing the daemon itself.
@@ -713,14 +725,21 @@ fn quit_app(hwnd: HWND) {
         }
     }
     // skip_graceful: the bounded POST above already ran, and a second 20s attempt plus its 10s
-    // poll is exactly how Quit used to turn into a ~30 s hang.
-    if !use_token {
-        daemon::stop(&a.cfg, &a.token, true, false);
-        daemon::clear_run_sentinels(&a.cfg);
-    } else if owned {
-        daemon::stop(&a.cfg, &a.token, true, true);
-        daemon::clear_run_sentinels(&a.cfg);
+    // poll is exactly how Quit used to turn into a ~30 s hang. No ownership gate either:
+    // kill_port_owners targets whatever actually holds the port(s), which for an attached tray
+    // IS the daemon we just asked to leave.
+    daemon::stop(&a.cfg, &a.token, true, true);
+    daemon::clear_run_sentinels(&a.cfg);
+    // The attached-daemon POST above is token-less, so the daemon wrote the full-shutdown
+    // sentinel DURING its graceful stop — long after the remove_file at the top of this
+    // function. A leftover file makes the NEXT tray quit 500 ms after it starts
+    // (sentinel_tick), so consume it here, after stop() has settled on the daemon being gone.
+    if let Some(path) = a.cfg.sentinel_file.as_ref() {
+        let _ = std::fs::remove_file(path);
     }
+    // The portable window is deliberately OUTSIDE the daemon's process tree, so nothing above
+    // reached it; a full Quit closes it too.
+    browser::kill_portable_windows(&a.cfg);
 
     UI.with(|ui| {
         let mut slot = ui.borrow_mut();
