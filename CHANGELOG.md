@@ -4,6 +4,31 @@ All notable changes to DevWebUI are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2] - 2026-10-06
+
+**Clicking "Browse…" in Add Project finally shows the picker — on top, every time.**
+
+### Fixed
+
+- **The native "Browse…" pickers opened behind the maximized browser that asked for
+  them.** The daemon pops the real OS dialog by spawning PowerShell; the script parked
+  the dialog on an owner form flagged `TopMost` but never `Show()`n, expecting the
+  style to carry over. It doesn't: an unshown form's WS_EX_TOPMOST never engages, and
+  Windows additionally refuses foreground to the child of a background process (the
+  daemon is a tray app), so the dialog landed in the normal z-order band — fully
+  covered by the very window the user clicked in. Everything still worked underneath:
+  the request hung until the 180s cap killed the invisible dialog, answered
+  `{cancelled: true}`, and the GUI silently ignored it. To the user, "Browse" (file
+  picker, clone-destination folder picker, and the scan-folder picker alike) just did
+  nothing — unless foreground rights happened to line up, which is why it
+  occasionally popped up fine. The owner form is now actually shown — minimized, off
+  the taskbar — before `ShowDialog`, which deterministically puts the owned dialog in
+  the topmost band, visible over every normal window (focus still waits for the first
+  click; visibility was what was lost). Verified by spawning both the old and the new
+  script from a WMI service-parented process — the same foreground-denied context as
+  the tray daemon — and reading the live dialog's window styles: old = never topmost,
+  new = always topmost.
+
 ## [1.4.1] - 2026-10-06
 
 **One window per double-click, and the Settings ⓘ hints stop swallowing their bolded
