@@ -88,6 +88,10 @@ const NEVER_SYNCED = [
   // every server, or updating and relaunching itself, without being told to here.
   "autoStartOnLaunch",
   "autoUpdate",
+  // The UI-language mirror for the native tray host, per device on purpose: it shadows a
+  // browser-localStorage choice, and each machine's tray follows its own Windows UI language
+  // until its own browser picks one. Syncing it would flip every tray's menu at once.
+  "locale",
 ] as const satisfies readonly (keyof Settings)[];
 
 /**
