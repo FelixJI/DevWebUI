@@ -4,6 +4,34 @@ All notable changes to DevWebUI are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-10-06
+
+**One window per double-click, and the Settings ⓘ hints stop swallowing their bolded
+words.**
+
+### Fixed
+
+- **A release double-click opened the UI twice.** At the end of boot the daemon opened a
+  browser tab (`openUi`) AND started a tray host — and a tray host that finds a daemon
+  already serving opens the UI once at its own startup, so every cold double-click got
+  two windows: the daemon's plain tab plus the tray's (in portable mode the tray's is a
+  chromeless app window, which made the pair unmistakable). The boot tail now awaits the
+  tray-start decision: when THIS boot started the tray host, the host owns the window —
+  and honours portable mode, which the daemon's plain `start <url>` never did — while the
+  daemon opens the UI itself only when no tray host will (an already-running host never
+  opens on someone else's boot; a hidden or non-Windows tray starts none). The first
+  window on a cold start now arrives a few hundred milliseconds later, after the
+  host-running probe that decision needs.
+
+- **Settings ⓘ tooltips hid their emphasised words.** The help strings rendered with
+  v-html inside tooltips carry `<strong class="text-foreground">` emphasis authored for
+  normal surfaces; a tooltip is the inverse surface (`bg-foreground` / `text-background`),
+  so those spans painted the bubble's own background colour and whole words — "on",
+  "off", "Bun", "Node", `<host>`… — vanished in BOTH themes. Tooltip content now forces
+  `.text-foreground` descendants to inherit the tooltip's own text colour. The rule is
+  deliberately unlayered: Tailwind v4 puts utilities in `@layer utilities`, and an
+  unlayered rule wins that cascade regardless of order.
+
 ## [1.4.0] - 2026-10-06
 
 **The tray menu speaks your language, and Quit is a full exit on machines whose port table
