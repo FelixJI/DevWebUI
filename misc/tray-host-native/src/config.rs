@@ -46,7 +46,7 @@ pub struct Config {
     /// Wait for the listen socket to actually free before re-spawning (force-kill apps).
     pub use_port_free_wait: bool,
 
-    pub menu_open_label: String,
+    pub menu_open_label: LocalizedText,
     pub rebuild_command: Option<String>,
     pub rebuild_log_name: String,
     /// The tray's OWN log, beside the rebuild log: every daemon birth and death it witnesses.
@@ -81,15 +81,15 @@ pub struct Config {
     /// daemon owns (DevWebUI's managed dev servers) rather than just the daemon itself: Restart and
     /// Quit act on the daemon, this acts on what the daemon is running.
     pub action_path: Option<String>,
-    pub action_label: String,
-    pub action_ok_text: String,
-    pub action_fail_text: String,
+    pub action_label: LocalizedText,
+    pub action_ok_text: LocalizedText,
+    pub action_fail_text: LocalizedText,
     pub action_timeout_secs: u64,
 
     /// Shown when the daemon starts but never serves. One app's overwhelmingly likely cause is a
-    /// missing configuration step, and a tray icon that silently does nothing is a worse answer
-    /// than telling the user which command to run.
-    pub not_serving_hint: Option<String>,
+    /// missing configuration step, and the honest answer is to say which command to run rather
+    /// than leave a tray icon that quietly does nothing.
+    pub not_serving_hint: Option<LocalizedText>,
 
     /// First-run bootstrap: `[{ "missing": "node_modules", "run": "bun install" }, ...]`. Each
     /// entry runs (blocking, once) only when its path is absent from the app root. The tray icon is
@@ -101,6 +101,73 @@ pub struct Config {
 pub struct FirstRunStep {
     pub missing: String,
     pub run: String,
+}
+
+/// A config label that may be one string for every locale or a per-locale map:
+///
+/// ```json
+/// "menuOpenLabel": { "": "Open DevWebUI", "zh-CN": "打开 DevWebUI", "ja": "DevWebUI を開く" }
+/// ```
+///
+/// The `""` (or `"en"`) entry is the default shown to any locale the map does not carry; a bare
+/// string stays valid and is the default for everyone. Lookup walks exact code → primary subtag
+/// (`zh-HK` → the `zh-CN` entry) → default, mirroring the host's own language tables (lang.rs).
+#[derive(Debug, Clone)]
+pub struct LocalizedText {
+    default: String,
+    by_locale: BTreeMap<String, String>,
+}
+
+impl LocalizedText {
+    pub fn plain(s: &str) -> LocalizedText {
+        LocalizedText {
+            default: s.to_string(),
+            by_locale: BTreeMap::new(),
+        }
+    }
+
+    /// The text for `locale` (a BCP 47 code, or "" for the default).
+    pub fn text(&self, locale: &str) -> &str {
+        let key = locale.trim().to_lowercase();
+        if !key.is_empty() {
+            if let Some((_, v)) = self.by_locale.iter().find(|(k, _)| k.to_lowercase() == key) {
+                return v;
+            }
+            if let Some(primary) = key.split(['-', '_']).next() {
+                if let Some((_, v)) = self
+                    .by_locale
+                    .iter()
+                    .find(|(k, _)| k.to_lowercase().split(['-', '_']).next() == Some(primary))
+                {
+                    return v;
+                }
+            }
+        }
+        &self.default
+    }
+}
+
+/// Read a config key as a LocalizedText: a plain string, or an object of per-locale strings.
+fn localized_at(v: &Json, key: &str) -> Option<LocalizedText> {
+    match v.get(key)? {
+        Json::Str(s) => Some(LocalizedText::plain(s)),
+        Json::Obj(map) => {
+            let default = map
+                .get("")
+                .or_else(|| map.get("en"))
+                .and_then(Json::as_str)
+                .map(str::to_string)
+                // No explicit default: BTree iteration order makes the pick deterministic.
+                .or_else(|| map.values().find_map(Json::as_str).map(str::to_string))?;
+            let by_locale = map
+                .iter()
+                .filter(|(k, _)| k.as_str() != "" && k.as_str() != "en")
+                .filter_map(|(k, val)| Some((k.clone(), val.as_str()?.to_string())))
+                .collect();
+            Some(LocalizedText { default, by_locale })
+        }
+        _ => None,
+    }
 }
 
 fn opt_string(v: Option<&str>) -> Option<String> {
@@ -310,10 +377,8 @@ impl Config {
             worker_wait_secs: v.num_at("workerWaitSec").unwrap_or(12.0) as u64,
             restart_retries: v.num_at("restartRetries").unwrap_or(0.0) as u32,
             use_port_free_wait: v.flag_at("usePortFreeWait"),
-            menu_open_label: v
-                .str_at("menuOpenLabel")
-                .map(str::to_string)
-                .unwrap_or_else(|| format!("Open {}", v.str_at("displayName").unwrap_or("app"))),
+            menu_open_label: localized_at(v, "menuOpenLabel")
+                .unwrap_or_else(|| LocalizedText::plain(&format!("Open {}", v.str_at("displayName").unwrap_or("app")))),
             rebuild_command: opt_string(v.str_at("rebuildCommand")),
             rebuild_log_name: v.str_at("rebuildLogName").unwrap_or("Rebuild.log").to_string(),
             tray_log_name: v.str_at("trayLogName").unwrap_or("Tray.log").to_string(),
@@ -336,14 +401,12 @@ impl Config {
             portable_window_size: size,
             portable_window_size_hint: v.flag_at("portableWindowSizeHint"),
             action_path: opt_string(v.str_at("actionPath")),
-            action_label: v.str_at("actionLabel").unwrap_or("Run action").to_string(),
-            action_ok_text: v.str_at("actionOkText").unwrap_or("Done.").to_string(),
-            action_fail_text: v
-                .str_at("actionFailText")
-                .unwrap_or("{APP} didn't accept that. Open it to check.")
-                .to_string(),
+            action_label: localized_at(v, "actionLabel").unwrap_or_else(|| LocalizedText::plain("Run action")),
+            action_ok_text: localized_at(v, "actionOkText").unwrap_or_else(|| LocalizedText::plain("Done.")),
+            action_fail_text: localized_at(v, "actionFailText")
+                .unwrap_or_else(|| LocalizedText::plain("{APP} didn't accept that. Open it to check.")),
             action_timeout_secs: v.num_at("actionTimeoutSec").unwrap_or(60.0) as u64,
-            not_serving_hint: opt_string(v.str_at("notServingHint")),
+            not_serving_hint: localized_at(v, "notServingHint"),
             first_run: resolve_first_run(v, &compiled),
             app_root,
         })
@@ -422,5 +485,34 @@ mod tests {
             "a compiled tree must not bootstrap: {:?}",
             cfg.first_run
         );
+    }
+
+    /// A label may be a plain string (every locale) or a per-locale map with a ""/"en" default;
+    /// lookup walks exact code → primary subtag → default.
+    #[test]
+    fn localized_labels_resolve_from_exact_primary_then_default() {
+        let src = r#"{
+            "displayName": "Test", "serviceName": "test", "mutexName": "TestTray",
+            "appRoot": ".", "infoFile": "runtime.json",
+            "startCommand": "{RUNTIME} x",
+            "menuOpenLabel": { "": "Open Test", "zh-CN": "打开 Test", "zh-TW": "開啟 Test", "de": "Test öffnen" }
+        }"#;
+        let v = json::parse(src).expect("valid json");
+        let cfg = Config::from_json(&v, Path::new("test-tray.json")).expect("valid config");
+        assert_eq!(cfg.menu_open_label.text("zh-CN"), "打开 Test");
+        assert_eq!(cfg.menu_open_label.text("ZH-cn"), "打开 Test"); // case is a convention
+        assert_eq!(cfg.menu_open_label.text("zh-HK"), "打开 Test"); // primary subtag → zh-CN
+        assert_eq!(cfg.menu_open_label.text("de-AT"), "Test öffnen");
+        assert_eq!(cfg.menu_open_label.text("fr"), "Open Test"); // unmapped → default
+        assert_eq!(cfg.menu_open_label.text(""), "Open Test");
+    }
+
+    /// A bare string label keeps working unchanged — the whole config of an app that does not
+    /// care about locales is one string, not a one-entry map.
+    #[test]
+    fn a_plain_string_label_serves_every_locale() {
+        let cfg = config_with("definitely-not-here.exe");
+        assert!(cfg.menu_open_label.text("zh-CN").starts_with("Open "));
+        assert!(cfg.menu_open_label.text("").starts_with("Open "));
     }
 }

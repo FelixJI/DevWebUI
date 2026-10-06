@@ -75,6 +75,17 @@ pub const PROBE_FAST: Duration = Duration::from_millis(15);
 /// The probe used once we are already waiting, where correctness beats another 10 ms.
 pub const PROBE_POLL: Duration = Duration::from_millis(400);
 
+/// A string field from the runtime pointer, read FRESH. `locale` is a live setting (the daemon
+/// republishes it when the user flips the web UI's language picker), so it is read at use, the
+/// same way the tray-visibility flag is.
+pub fn pointer_str(cfg: &Config, key: &str) -> Option<String> {
+    std::fs::read_to_string(&cfg.info_file)
+        .ok()
+        .and_then(|s| crate::json::parse(&s))
+        .and_then(|v| v.str_at(key).map(str::to_string))
+        .filter(|s| !s.is_empty())
+}
+
 /// One `GET /api/health`, over a raw socket.
 ///
 /// The identity rule is the PowerShell host's, unchanged and load-bearing: a responder is ours only
@@ -83,10 +94,7 @@ pub const PROBE_POLL: Duration = Duration::from_millis(400);
 /// fallback, which is how a sibling app once latched onto a stranger and reported the wrong thing
 /// in both directions.
 pub fn health_ok(host: &str, port: u16, service: &str, timeout: Duration) -> bool {
-    let Some(addr) = resolve(host, port) else {
-        return false;
-    };
-    let Ok(mut sock) = TcpStream::connect_timeout(&addr, timeout) else {
+    let Some(mut sock) = connect_any(host, port, timeout) else {
         return false;
     };
     let _ = sock.set_read_timeout(Some(timeout));
@@ -119,6 +127,31 @@ fn resolve(host: &str, port: u16) -> Option<SocketAddr> {
     (host, port).to_socket_addrs().ok()?.next()
 }
 
+/// EVERY address a host resolves to, not just the first.
+///
+/// "localhost" resolves to ::1 THEN 127.0.0.1 on a default Windows install (the hosts file lists
+/// both, IPv6 first), while a daemon that bound 127.0.0.1 answers on the second only. Taking
+/// `.next()` — which is what every socket here used to do — made the FIRST family a veto: the
+/// probe and the shutdown POST both connected to ::1, were refused, and reported a live daemon as
+/// dead. Refused connections fail in ~1 ms, so trying the whole list costs nothing.
+fn resolve_all(host: &str, port: u16) -> Vec<SocketAddr> {
+    use std::net::ToSocketAddrs;
+    (host, port).to_socket_addrs().map(|it| it.collect()).unwrap_or_default()
+}
+
+/// Connect to the first address of `host` that accepts, trying them all.
+fn connect_any(host: &str, port: u16, timeout: Duration) -> Option<TcpStream> {
+    let addrs = resolve_all(host, port);
+    let first = resolve(host, port)?;
+    // Keep the resolver's order (::1 first on Windows), but ensure a v4 fallback exists even if
+    // an exotic resolver returns only one family.
+    let mut ordered: Vec<SocketAddr> = addrs;
+    if !ordered.contains(&first) {
+        ordered.insert(0, first);
+    }
+    ordered.into_iter().find_map(|addr| TcpStream::connect_timeout(&addr, timeout).ok())
+}
+
 /// Split `http://host:port/...` into its host and port.
 pub fn split_url(url: &str) -> Option<(String, u16)> {
     let rest = url.split_once("://")?.1;
@@ -129,6 +162,22 @@ pub fn split_url(url: &str) -> Option<(String, u16)> {
 
 pub fn port_of(url: &str) -> Option<u16> {
     split_url(url).map(|(_, p)| p)
+}
+
+/// The pid the runtime pointer carried the last time a probe VALIDATED it (live_url answered
+/// through that same file). netstat is not a reliable source of daemon pids: filtering drivers
+/// (VPN/AV web shields, port forwarders) rewrite the TCP table so listeners report owner 0, and
+/// `taskkill /PID 0` is a silent no-op — which is how Quit could leave a daemon serving. This
+/// value is the backstop: it is only ever set from a pointer that just proved live, so killing it
+/// is aimed at a daemon this tray watched answer, not at a pid a stale file happens to name.
+pub static DAEMON_PID: AtomicU32 = AtomicU32::new(0);
+
+fn remember_pointer_pid(pointer: Option<&crate::json::Json>) {
+    let pid = pointer
+        .and_then(|v| v.num_at("pid"))
+        .map(|n| n as u32)
+        .unwrap_or(0);
+    DAEMON_PID.store(pid, Ordering::SeqCst);
 }
 
 /// The URL of a live instance, or None.
@@ -149,6 +198,7 @@ pub fn live_url(cfg: &Config, timeout: Duration) -> Option<String> {
     if let Some(url) = pointer.as_ref().and_then(|v| v.str_at("url")) {
         if let Some((host, port)) = split_url(url) {
             if health_ok(&host, port, &cfg.service_name, timeout) {
+                remember_pointer_pid(pointer.as_ref());
                 return Some(url.to_string());
             }
         }
@@ -156,10 +206,14 @@ pub fn live_url(cfg: &Config, timeout: Duration) -> Option<String> {
     // A pointer written by an older daemon may carry only the port.
     if let Some(port) = pointer.as_ref().and_then(|v| v.num_at("port")).map(|p| p as u16) {
         if port != 0 && health_ok("127.0.0.1", port, &cfg.service_name, timeout) {
+            remember_pointer_pid(pointer.as_ref());
             return Some(format!("http://127.0.0.1:{port}"));
         }
     }
     if cfg.port != 0 && health_ok(&cfg.url_host, cfg.port, &cfg.service_name, timeout) {
+        // Answered, but through the CONFIG rather than the pointer: whatever pid the pointer
+        // names was not just validated, so drop it rather than risk a recycled one.
+        DAEMON_PID.store(0, Ordering::SeqCst);
         return Some(format!("http://{}:{}", cfg.url_host, cfg.port));
     }
     None
@@ -397,21 +451,35 @@ pub fn wait_port_free(port: u16, secs: u64) -> bool {
 
 /// Ask the daemon to shut itself down cleanly. Token-gated: only a daemon this session started
 /// honours our token. Header names are `<prefix>-shutdown-token` / `<prefix>-shutdown-source`.
+///
+/// The connection targets the URL's OWN host — the one a probe just validated — with the config's
+/// `urlHost` as the fallback. The old code resolved ONLY `urlHost`; on a machine where "localhost"
+/// lists ::1 first and the daemon binds IPv4, the request went to ::1, was refused, and Quit's
+/// "graceful first" phase silently never ran (the force-kill backstop then met netstat's
+/// filtered pid column, and the daemon survived both).
 pub fn request_shutdown(cfg: &Config, url: &str, token: &str, timeout: Duration) -> bool {
     let Some(port) = port_of(url) else {
         return false;
     };
-    let Some(addr) = resolve(&cfg.url_host, port) else {
+    let hosts = match split_url(url) {
+        Some((h, _)) if h != cfg.url_host => vec![h, cfg.url_host.clone()],
+        _ => vec![cfg.url_host.clone()],
+    };
+    let mut sock = None;
+    for host in &hosts {
+        sock = connect_any(host, port, timeout);
+        if sock.is_some() {
+            break;
+        }
+    }
+    let Some(mut sock) = sock else {
         return false;
     };
-    let Ok(mut sock) = TcpStream::connect_timeout(&addr, timeout) else {
-        return false;
-    };
+    let host = hosts[0].as_str();
     let _ = sock.set_read_timeout(Some(timeout));
     let _ = sock.set_write_timeout(Some(timeout));
     let req = format!(
-        "POST /api/shutdown HTTP/1.1\r\nHost: {}:{port}\r\n{}: {token}\r\n{}: ui\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
-        cfg.url_host,
+        "POST /api/shutdown HTTP/1.1\r\nHost: {host}:{port}\r\n{}: {token}\r\n{}: ui\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
         cfg.shutdown_header("shutdown-token"),
         cfg.shutdown_header("shutdown-source"),
     );
@@ -429,10 +497,7 @@ pub fn post(url: &str, path: &str, timeout: Duration) -> bool {
     let Some((host, port)) = split_url(url) else {
         return false;
     };
-    let Some(addr) = resolve(&host, port) else {
-        return false;
-    };
-    let Ok(mut sock) = TcpStream::connect_timeout(&addr, timeout) else {
+    let Some(mut sock) = connect_any(&host, port, timeout) else {
         return false;
     };
     let _ = sock.set_read_timeout(Some(timeout));
@@ -457,29 +522,32 @@ Connection: close
 ///
 /// Token flavour: graceful POST first (unless `skip_graceful`, which Quit sets because it already
 /// ran its own bounded POST and a second 20s attempt would turn Quit into a ~30 s hang), then poll
-/// 40x250 ms for it to go, then force-kill the port owners and settle 20x200 ms.
-/// Force-kill flavour: straight to the kill, then settle 25x200 ms.
+/// 40x250 ms for it to go, then force-kill and settle 20x200 ms. Force-kill flavour: straight to
+/// the kill, then settle 25x200 ms.
 ///
 /// Both cover BOTH the preferred port and the pointer's actually-bound port, which is what handles
-/// a daemon that hopped.
+/// a daemon that hopped. And the kill runs even when the probe says nothing is live: a WEDGED
+/// daemon (port held, /api/health not answering) is the case that most needs the force-kill, and
+/// the old early-return on a dead probe trusted the probe over the port table.
 pub fn stop(cfg: &Config, token: &str, force_kill: bool, skip_graceful: bool) {
     let url = live_url(cfg, PROBE_POLL);
     let use_token = !token.is_empty();
 
     if use_token {
-        let Some(url) = url.as_deref() else { return };
         if !force_kill {
             return; // only ever act on a daemon we own
         }
-        if !skip_graceful && request_shutdown(cfg, url, token, Duration::from_secs(20)) {
-            for _ in 0..40 {
-                if live_url(cfg, PROBE_POLL).is_none() {
-                    return;
+        if let Some(url) = url.as_deref() {
+            if !skip_graceful && request_shutdown(cfg, url, token, Duration::from_secs(20)) {
+                for _ in 0..40 {
+                    if live_url(cfg, PROBE_POLL).is_none() {
+                        return;
+                    }
+                    std::thread::sleep(Duration::from_millis(250));
                 }
-                std::thread::sleep(Duration::from_millis(250));
             }
         }
-        kill_port_owners(cfg, url);
+        kill_daemon_processes(cfg, url.as_deref().unwrap_or(""));
         for _ in 0..20 {
             if live_url(cfg, PROBE_POLL).is_none() {
                 return;
@@ -487,7 +555,7 @@ pub fn stop(cfg: &Config, token: &str, force_kill: bool, skip_graceful: bool) {
             std::thread::sleep(Duration::from_millis(200));
         }
     } else {
-        kill_port_owners(cfg, url.as_deref().unwrap_or(""));
+        kill_daemon_processes(cfg, url.as_deref().unwrap_or(""));
         for _ in 0..25 {
             if live_url(cfg, PROBE_POLL).is_none() {
                 return;
@@ -497,20 +565,43 @@ pub fn stop(cfg: &Config, token: &str, force_kill: bool, skip_graceful: bool) {
     }
 }
 
-fn kill_port_owners(cfg: &Config, url: &str) {
+/// taskkill everything that plausibly IS the daemon:
+///
+/// * the pids netstat reports as owning the port(s) — the classic route, but not a complete one:
+///   a filtering driver can rewrite the TCP table so the listener reports owner 0 (observed live:
+///   `127.0.0.1:4000 LISTENING 0` under the daemon's accepted connections), and `taskkill /PID 0`
+///   is a no-op; and
+/// * the pid the runtime pointer carried when a probe last validated it (DAEMON_PID), which no
+///   driver rewrites. Only added when it is alive and is not this process, so a stale file can
+///   never make the tray kill itself.
+fn kill_daemon_processes(cfg: &Config, url: &str) {
     let mut ports = vec![cfg.port];
     if let Some(p) = port_of(url) {
         if p > 0 && !ports.contains(&p) {
             ports.push(p);
         }
     }
+    let mut pids: Vec<u32> = Vec::new();
     for port in ports {
         if port == 0 {
             continue;
         }
         for pid in port_pids(port) {
-            taskkill(pid);
+            if !pids.contains(&pid) {
+                pids.push(pid);
+            }
         }
+    }
+    let remembered = DAEMON_PID.load(Ordering::SeqCst);
+    if remembered > 0
+        && remembered != std::process::id()
+        && !pids.contains(&remembered)
+        && crate::win::pid_alive(remembered)
+    {
+        pids.push(remembered);
+    }
+    for pid in pids {
+        taskkill(pid);
     }
 }
 

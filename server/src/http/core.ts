@@ -197,6 +197,7 @@ async function handlePutSettings(c: Context, manager: Manager) {
         : undefined,
     portableMode: optBool(body.portableMode),
     hideTrayIcon: optBool(body.hideTrayIcon),
+    locale: typeof body.locale === "string" ? body.locale : undefined,
   });
   manager.globalRuntime = saved.runtime;
   manager.freePortOnStart = saved.freePortOnStart;
@@ -208,8 +209,14 @@ async function handlePutSettings(c: Context, manager: Manager) {
   setAutoUpdateIntervalSecs(saved.autoUpdateIntervalSecs);
   setUpdateNotifyEnabled(saved.updateNotify);
   // Keep the runtime pointer's launcher-facing flags current so the tray sees the new
-  // values within its next poll/timer tick without waiting for a daemon restart.
-  updateInstanceInfo({ portableMode: saved.portableMode, hideTrayIcon: saved.hideTrayIcon });
+  // values within its next poll/timer tick without waiting for a daemon restart. `locale`
+  // included: the native tray host re-reads the pointer to render its menu in the app's
+  // language, so flipping the web UI's language picker re-renders the tray within a tick.
+  updateInstanceInfo({
+    portableMode: saved.portableMode,
+    hideTrayIcon: saved.hideTrayIcon,
+    locale: saved.locale,
+  });
   // Apply to anything already running — fire-and-forget so this response can't hang on
   // a stubborn kill; the GUI sees the restarts via SSE status events.
   if (body.restart) void manager.restartRunning();

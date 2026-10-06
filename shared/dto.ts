@@ -183,6 +183,15 @@ export interface Settings {
    * can be turned back on right here in Settings. See misc/DevWebUI-Tray.ps1.
    */
   hideTrayIcon: boolean;
+  /**
+   * The UI language the user picked (a BCP 47 code such as "zh-CN"; "" = not chosen yet).
+   * The web UI persists its own copy in localStorage for instant boot, and mirrors the choice
+   * here so the daemon can publish it in the runtime pointer — the native tray host reads that
+   * field to render its menu and balloons in the same language, falling back to the Windows UI
+   * language while unset. Unknown codes are ignored by the tray (it falls back to English),
+   * so no validation happens here.
+   */
+  locale: string;
 }
 
 // ---- scaffold detection ---------------------------------------------------

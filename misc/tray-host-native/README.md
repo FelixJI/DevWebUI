@@ -1,14 +1,25 @@
 # lunarwerx-tray (spike)
 
 > **FORK NOTE (FelixJI/DevWebUI, v1.2.0+, 2026-10):** this copy has DIVERGED from the LunarWerx
-> kit. `quit_app` was reworked so tray Quit is a FULL exit in this fork: an ATTACHED daemon (one
-> the tray did not spawn — the common double-clicked-exe flow) is now asked to shut down via the
+> kit in three ways. (1) `quit_app` was reworked so tray Quit is a FULL exit: an ATTACHED daemon
+> (one the tray did not spawn — the common double-clicked-exe flow) is asked to shut down via the
 > token-less ui-source request and force-killed as a backstop, the full-shutdown sentinel is
 > re-removed after the stop, and `browser::kill_portable_windows` closes the portable window
-> (outside the daemon's tree by design, so nothing else reaches it). Re-syncing from the kit will
-> conflict on `src/main.rs` and `src/browser.rs`; re-apply this behaviour or drop it deliberately.
-> Rebuild with `cargo build --release` and copy `target/release/lunarwerx-tray.exe` over
-> `misc/lunarwerx-tray.exe` (end the running host first — Windows locks a running image).
+> (outside the daemon's tree by design, so nothing else reaches it). (2) The backstop does not
+> trust netstat alone: filtering drivers rewrite the TCP table so listeners can report owner 0
+> (observed live: `127.0.0.1:4000 LISTENING 0` under the daemon's accepted connections), so the
+> kill set also includes the runtime pointer's pid — remembered only from a probe that just
+> validated that pointer (daemon::DAEMON_PID) — and every socket connect tries EVERY resolved
+> address ("localhost" lists ::1 first on Windows; taking only the first made the shutdown POST
+> and the health probe hit a family the daemon never bound). (3) The host UI is multilingual
+> (src/lang.rs): its own menu/balloons carry 7 locales matching the web UI, config labels may be
+> per-locale maps (Config::LocalizedText), and the active locale is the runtime pointer's
+> `locale` field (republished by the daemon from the web UI's language picker), falling back to
+> the Windows UI language, then English. Re-syncing from the kit will conflict on `src/main.rs`,
+> `src/daemon.rs`, `src/config.rs`, `src/win.rs` and `src/browser.rs`; re-apply this behaviour or
+> drop it deliberately. Rebuild with `cargo build --release` and copy
+> `target/release/lunarwerx-tray.exe` over `misc/lunarwerx-tray.exe` (end the running host first —
+> Windows locks a running image).
 
 A native Windows tray host, built to answer one question: **how much of an app's launch time is the
 PowerShell tray host itself?**

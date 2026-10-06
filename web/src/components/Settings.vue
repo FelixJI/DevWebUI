@@ -64,11 +64,16 @@ const { mode: theme, isDark } = useTheme();
 const { enabled: tooltipsEnabled } = useTooltipConfig();
 
 // Language picker: reads/writes the global i18n locale via setLocale (which persists
-// the choice and updates <html lang>). Only English ships today; the list grows from
-// the LOCALES registry.
+// the choice and updates <html lang>). Switching ALSO mirrors the choice into the
+// daemon's settings: the daemon republishes it in the runtime pointer and the native
+// tray host renders its menu/balloons in the same language within one tick.
+// Fire-and-forget — a failed mirror must never fail the language switch itself.
 const currentLocale = computed<LocaleCode>({
   get: () => locale.value as LocaleCode,
-  set: (v) => setLocale(v),
+  set: (v) => {
+    setLocale(v);
+    void saveSettings({ locale: v }).catch(() => {});
+  },
 });
 
 const runtime = ref<RuntimePref>("auto");

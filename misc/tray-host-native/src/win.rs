@@ -131,6 +131,9 @@ extern "system" {
     pub fn OpenProcess(access: u32, inherit: i32, pid: u32) -> HANDLE;
     pub fn GetExitCodeProcess(h: HANDLE, code: *mut u32) -> i32;
     pub fn GetTickCount64() -> u64;
+    /// The user's UI locale as a BCP 47 name ("zh-CN"), into `buf` (LOCALE_NAME_MAX_LENGTH = 85).
+    /// Returns the length written including the NUL, or 0 on failure.
+    pub fn GetUserDefaultLocaleName(buf: *mut u16, size: i32) -> i32;
 }
 
 /// When this machine booted, in epoch ms: the same moment crash-sentinel.mjs records as a run

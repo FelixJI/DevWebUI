@@ -104,6 +104,7 @@ export function readSettings(): Settings {
         : 0,
       portableMode: bool(s.portableMode, false),
       hideTrayIcon: bool(s.hideTrayIcon, false),
+      locale: cleanStr(s.locale, ""),
     };
   } catch {
     return {
@@ -118,6 +119,7 @@ export function readSettings(): Settings {
       updateCooldownDays: 0,
       portableMode: false,
       hideTrayIcon: false,
+      locale: "",
     };
   }
 }
@@ -146,6 +148,7 @@ export function writeSettings(patch: Partial<Settings>): Settings {
         : cur.updateCooldownDays,
     portableMode: bool(patch.portableMode, cur.portableMode),
     hideTrayIcon: bool(patch.hideTrayIcon, cur.hideTrayIcon),
+    locale: patch.locale !== undefined ? cleanStr(patch.locale, cur.locale) : cur.locale,
   };
   mkdirSync(dataDir(), { recursive: true });
   writeJsonAtomic(settingsFile(), next, { mode: 0o600, trailingNewline: false });

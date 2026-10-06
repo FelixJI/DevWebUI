@@ -11,7 +11,22 @@
   "displayName": "DevWebUI",
   "serviceName": "devwebui",
   "mutexName": "DevWebUITrayHost",
-  "menuOpenLabel": "Open DevWebUI",
+  "_menuOpenLabel": [
+    "The tray's own strings (Restart, Quit, the balloons) live in the host's language tables",
+    "(misc/tray-host-native/src/lang.rs). An app label here can be one string for every locale or",
+    "a per-locale map whose \"\" (or \"en\") entry is the default; the tray resolves its active",
+    "locale from the runtime pointer's `locale` field (mirroring the web UI's language picker),",
+    "falling back to the Windows UI language."
+  ],
+  "menuOpenLabel": {
+    "": "Open DevWebUI",
+    "zh-CN": "打开 DevWebUI",
+    "zh-TW": "開啟 DevWebUI",
+    "ja": "DevWebUI を開く",
+    "es": "Abrir DevWebUI",
+    "de": "DevWebUI öffnen",
+    "fr": "Ouvrir DevWebUI"
+  },
   "iconFile": "DevWebUI.ico",
   "appRoot": "..",
 
@@ -55,9 +70,33 @@
     "can take seconds while each child's SIGTERM grace elapses, so the host fires it off-thread."
   ],
   "actionPath": "/api/processes/stop-all",
-  "actionLabel": "Stop all processes",
-  "actionOkText": "All managed processes stopped.",
-  "actionFailText": "Couldn't stop everything - open {APP} to check.",
+  "actionLabel": {
+    "": "Stop all processes",
+    "zh-CN": "停止所有进程",
+    "zh-TW": "停止所有程序",
+    "ja": "すべてのプロセスを停止",
+    "es": "Detener todos los procesos",
+    "de": "Alle Prozesse stoppen",
+    "fr": "Arrêter tous les processus"
+  },
+  "actionOkText": {
+    "": "All managed processes stopped.",
+    "zh-CN": "已停止全部托管进程。",
+    "zh-TW": "已停止所有受管理程序。",
+    "ja": "管理下のプロセスをすべて停止しました。",
+    "es": "Se detuvieron todos los procesos gestionados.",
+    "de": "Alle verwalteten Prozesse wurden gestoppt.",
+    "fr": "Tous les processus gérés ont été arrêtés."
+  },
+  "actionFailText": {
+    "": "Couldn't stop everything - open {APP} to check.",
+    "zh-CN": "未能全部停止——打开 {APP} 检查。",
+    "zh-TW": "未能全部停止——開啟 {APP} 檢查。",
+    "ja": "すべて停止できませんでした - {APP} を開いて確認してください。",
+    "es": "No se pudo detener todo: abre {APP} para comprobarlo.",
+    "de": "Nicht alles konnte gestoppt werden – {APP} zum Prüfen öffnen.",
+    "fr": "Impossible de tout arrêter – ouvrez {APP} pour vérifier."
+  },
 
   "portableWindowSize": { "width": 840, "height": 760 },
   "portableWindowSizeHint": true

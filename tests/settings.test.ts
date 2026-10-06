@@ -61,3 +61,32 @@ test("writeSettings ignores a non-boolean updateNotify and keeps the current val
   writeSettings({ updateNotify: "yes" });
   expect(readSettings().updateNotify).toBe(false);
 });
+
+// locale: the UI-language mirror the daemon republishes in the runtime pointer so the native
+// tray host renders its menu in the same language. "" = not chosen yet (the tray then follows
+// the Windows UI language); anything string-shaped is stored verbatim — the tray ignores codes
+// it has no table for, so validation is deliberately not this side's job.
+test("locale defaults to empty when no settings file exists yet", () => {
+  expect(readSettings().locale).toBe("");
+});
+
+test("writeSettings persists locale, and readSettings round-trips it back", () => {
+  writeSettings({ locale: "zh-CN" });
+  expect(readSettings().locale).toBe("zh-CN");
+
+  writeSettings({ locale: "" }); // clearing the choice is valid too
+  expect(readSettings().locale).toBe("");
+});
+
+test("writeSettings leaves locale untouched when the patch omits it", () => {
+  writeSettings({ locale: "ja" });
+  writeSettings({ portableMode: true }); // unrelated patch, no locale key at all
+  expect(readSettings().locale).toBe("ja");
+});
+
+test("writeSettings ignores a non-string locale and keeps the current value", () => {
+  writeSettings({ locale: "de" });
+  // @ts-expect-error — deliberately malformed input, mirroring how a bad PUT body is handled
+  writeSettings({ locale: 7 });
+  expect(readSettings().locale).toBe("de");
+});

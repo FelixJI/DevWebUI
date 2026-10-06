@@ -281,6 +281,7 @@ const projectWatcher = startProjectWatch(manager);
 writeInstanceInfo(PORT, {
   portableMode: startupSettings.portableMode === true,
   hideTrayIcon: startupSettings.hideTrayIcon === true,
+  locale: startupSettings.locale,
 });
 // Clear any stale "full shutdown" sentinel left by a previous (possibly hard-killed) run so a
 // leftover can't make a freshly-launched tray quit the instant it starts. Only a genuine

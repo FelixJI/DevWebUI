@@ -4,6 +4,41 @@ All notable changes to DevWebUI are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-10-06
+
+**The tray menu speaks your language, and Quit is a full exit on machines whose port table
+lies.** The tray host is rebuilt from the fork's Rust source (see the fork note in
+`misc/tray-host-native/README.md`).
+
+### Fixed
+
+- **Tray Quit could leave the daemon serving.** Two independent defects stacked on the
+  machines that have them, either one alone breaking the backstop: (1) every socket connect
+  took only the FIRST address a host resolved to, and on a default Windows install
+  "localhost" lists `::1` first — so against a daemon bound to 127.0.0.1 the shutdown POST
+  (and the health probe) connected to ::1, was refused, and silently never ran; (2) the
+  force-kill backstop found the daemon through netstat's port-owner column, which filtering
+  drivers (VPN/AV web shields, forwarders) rewrite so the listener reports owner **0**, and
+  `taskkill /PID 0` is a no-op. Connects now try every resolved address, the shutdown POST
+  targets the probe-validated URL's own host, and the kill set additionally includes the
+  runtime pointer's pid — remembered only from a probe that just validated that pointer, so
+  a stale file can never aim the tray at a recycled pid. The kill also runs when the health
+  probe says nothing is live: a wedged daemon (port held, health not answering) is exactly
+  the case that needs it. Verified live on a machine exhibiting both defects: Quit (and the
+  web UI's "Shut down", which rides the same teardown) leaves no daemon, no tray and no
+  listener on the port.
+
+### Added
+
+- **Multilingual tray.** The tray host's own menu items and balloon tips now carry the same
+  seven locales as the web UI (en, zh-CN, zh-TW, ja, es, de, fr; unknown locales fall back
+  to English). App-owned labels ("Open DevWebUI", "Stop all processes", its result texts)
+  moved to per-locale maps in `misc/DevWebUI-Tray.json`. The active language follows the
+  web UI's language picker: switching it persists to the daemon settings, which republish
+  it in the runtime pointer, which the tray re-reads live — so the menu flips within a
+  poll tick, no restart. Before the user has ever chosen, the tray follows the Windows UI
+  language. `Settings.locale` is a new persisted setting (blank = not chosen).
+
 ## [1.3.0] - 2026-10-06
 
 **Tray Quit is a full exit, and double-clicking a running app asks what you meant.**

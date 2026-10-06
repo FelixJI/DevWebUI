@@ -18,6 +18,7 @@ mod browser;
 mod config;
 mod daemon;
 mod json;
+mod lang;
 mod sha256;
 mod win;
 
@@ -109,6 +110,27 @@ fn get_url() -> Option<String> {
     app().url.lock().unwrap().clone()
 }
 
+// --- locale -------------------------------------------------------------------------------------
+
+/// The language every UI string this host shows is rendered in. Resolution: the runtime pointer's
+/// `locale` (the daemon republishes the web UI's language picker choice, so the tray follows the
+/// app's language within one tick), else the Windows UI language, else English. Read fresh at
+/// every use — see [`lang`].
+fn lang_for(cfg: &config::Config) -> &'static lang::Lang {
+    if let Some(code) = daemon::pointer_str(cfg, "locale") {
+        return lang::for_code(&code);
+    }
+    lang::for_code(&lang::os_locale())
+}
+fn active_lang() -> &'static lang::Lang {
+    lang_for(&app().cfg)
+}
+
+/// `{APP}`-style placeholder substitution (see [`lang::template`]).
+fn tr(text: &str, vars: &[(&str, &str)]) -> String {
+    lang::template(text, vars)
+}
+
 // --- tray plumbing -----------------------------------------------------------------------------
 
 fn balloon(text: &str, flag: u32) {
@@ -181,31 +203,34 @@ unsafe fn show_menu(hwnd: HWND) {
     let menu = CreatePopupMenu();
     let busy = a.busy.load(Ordering::Relaxed);
     let grey = if busy { MF_GRAYED } else { 0 };
+    let l = active_lang();
+    let loc = daemon::pointer_str(&a.cfg, "locale")
+        .unwrap_or_else(|| lang::os_locale());
 
-    let open = wide(&a.cfg.menu_open_label);
+    let open = wide(&a.cfg.menu_open_label.text(&loc));
     AppendMenuW(menu, MF_STRING, ID_OPEN, open.as_ptr());
     // "Rebuild & Restart" only exists in a dev tree: a distributed build ships no source, so
     // rebuilding there could only fail. Triple-gated, exactly as before (menu, dispatch, worker).
     if a.cfg.is_dev_tree && a.cfg.rebuild_command.is_some() {
-        let rebuild = wide("Rebuild && Restart");
+        let rebuild = wide(l.rebuild_restart);
         AppendMenuW(menu, MF_STRING | grey, ID_REBUILD, rebuild.as_ptr());
     }
     // In safe mode, Restart is the way back out, and says so.
     let safe = daemon::SAFE_MODE.load(Ordering::Relaxed);
-    let restart = wide(if safe { "Restart Normally" } else { "Restart" });
+    let restart = wide(if safe { l.restart_normally } else { l.restart });
     AppendMenuW(menu, MF_STRING | grey, ID_RESTART, restart.as_ptr());
     if !safe && a.unclean_exit_seen.load(Ordering::Relaxed) {
-        let safe_item = wide("Restart in Safe Mode");
+        let safe_item = wide(l.restart_safe);
         AppendMenuW(menu, MF_STRING | grey, ID_SAFE_MODE, safe_item.as_ptr());
     }
     // The app-action item, for apps that supervise WORK the daemon owns rather than just the
     // daemon itself: Restart and Quit act on the daemon, this acts on what the daemon is running.
     if a.cfg.action_path.is_some() {
-        let label = wide(&a.cfg.action_label);
+        let label = wide(&a.cfg.action_label.text(&loc));
         AppendMenuW(menu, MF_STRING | grey, ID_ACTION, label.as_ptr());
     }
     AppendMenuW(menu, MF_SEPARATOR, 0, null_mut());
-    let quit = wide("Quit");
+    let quit = wide(l.quit);
     AppendMenuW(menu, MF_STRING, ID_QUIT, quit.as_ptr());
 
     let mut pt = POINT::default();
@@ -220,7 +245,10 @@ fn open_current_ui() {
     match get_url() {
         Some(url) => browser::open_ui(&app().cfg, &url),
         None => balloon(
-            &format!("{} isn't running.", app().cfg.display_name),
+            &tr(
+                active_lang().not_running,
+                &[("{APP}", &app().cfg.display_name)],
+            ),
             NIIF_WARNING,
         ),
     }
@@ -262,7 +290,11 @@ fn restart_in_mode(hwnd: HWND, safe: bool) {
     }
     daemon::SAFE_MODE.store(safe, Ordering::Relaxed);
     let name = &a.cfg.display_name;
-    let tip = if safe { format!("{name} (Safe Mode)") } else { name.clone() };
+    let tip = if safe {
+        format!("{name}{}", active_lang().safe_suffix)
+    } else {
+        name.clone()
+    };
     UI.with(|ui| {
         let mut slot = ui.borrow_mut();
         let Some(ui) = slot.as_mut() else { return };
@@ -288,7 +320,7 @@ fn start_action(hwnd: HWND) {
     };
     let Some(url) = get_url() else {
         balloon(
-            &format!("{} isn't running.", a.cfg.display_name),
+            &tr(active_lang().not_running, &[("{APP}", &a.cfg.display_name)]),
             NIIF_WARNING,
         );
         return;
@@ -622,9 +654,13 @@ fn health_tick() {
                 a.unclean_exit_seen.store(true, Ordering::Relaxed);
             }
             if verdict == Verdict::CrashLoop {
-                let hint = if offers_safe_mode { "Restart or Restart in Safe Mode" } else { "Restart to try again" };
+                let l = active_lang();
+                let hint = if offers_safe_mode { l.hint_safe } else { l.hint_plain };
                 balloon(
-                    &format!("{} keeps crashing - auto-restart paused. Use {hint}.", a.cfg.display_name),
+                    &tr(
+                        l.keeps_crashing,
+                        &[("{APP}", &a.cfg.display_name), ("{HINT}", hint)],
+                    ),
                     NIIF_ERROR,
                 );
             } else {
@@ -655,7 +691,10 @@ fn revive(a: &App) {
 
     daemon::spawn(&a.cfg, &a.token, "watchdog revive");
     balloon(
-        &format!("{} stopped unexpectedly - restarting.", a.cfg.display_name),
+        &tr(
+            active_lang().stopped_unexpectedly,
+            &[("{APP}", &a.cfg.display_name)],
+        ),
         NIIF_WARNING,
     );
 }
@@ -791,13 +830,17 @@ unsafe extern "system" fn wndproc(h: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LR
         }
         WM_APP_WORKER_DONE => {
             let a = app();
+            let l = active_lang();
+            let name = a.cfg.display_name.as_str();
+            let loc =
+                daemon::pointer_str(&a.cfg, "locale").unwrap_or_else(|| lang::os_locale());
             match w {
                 WORK_BUILD_FAILED => balloon(
-                    &format!("Build failed. See misc\\{}.", a.cfg.rebuild_log_name),
+                    &tr(l.build_failed, &[("{LOG}", &a.cfg.rebuild_log_name)]),
                     NIIF_ERROR,
                 ),
                 WORK_OK_NOT_READY => balloon(
-                    &format!("Restarted, but {} isn't answering yet.", a.cfg.display_name),
+                    &tr(l.restarted_not_ready, &[("{APP}", name)]),
                     NIIF_WARNING,
                 ),
                 WORK_OK_READY => {
@@ -807,14 +850,14 @@ unsafe extern "system" fn wndproc(h: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LR
                     }
                 }
                 WORK_ACTION_OK => {
-                    balloon(&a.cfg.action_ok_text.replace("{APP}", &a.cfg.display_name), NIIF_INFO)
+                    balloon(&a.cfg.action_ok_text.text(&loc).replace("{APP}", name), NIIF_INFO)
                 }
                 WORK_ACTION_FAILED => balloon(
-                    &a.cfg.action_fail_text.replace("{APP}", &a.cfg.display_name),
+                    &a.cfg.action_fail_text.text(&loc).replace("{APP}", name),
                     NIIF_WARNING,
                 ),
                 WORK_ACTION_NO_DAEMON => balloon(
-                    &format!("{} isn't running.", a.cfg.display_name),
+                    &tr(l.not_running, &[("{APP}", name)]),
                     NIIF_WARNING,
                 ),
                 _ => {}
@@ -910,9 +953,10 @@ fn bootstrap_and_spawn_daemon(cfg: &Config, token: &str) -> bool {
     if daemon::spawn(cfg, token, "tray start").is_some() {
         return true;
     }
+    let l = lang_for(cfg);
     win::message_box(
         &cfg.display_name,
-        &format!("{} could not start its background process.", cfg.display_name),
+        &tr(l.could_not_start, &[("{APP}", &cfg.display_name)]),
         MB_ICONERROR,
     );
     false
@@ -943,7 +987,8 @@ unsafe fn report_not_serving_and_teardown(a: &App) -> bool {
             }
         }
     });
-    win::message_box(&a.cfg.display_name, &hint, MB_ICONWARNING);
+    let loc = daemon::pointer_str(&a.cfg, "locale").unwrap_or_else(|| lang::os_locale());
+    win::message_box(&a.cfg.display_name, hint.text(&loc), MB_ICONWARNING);
     true
 }
 
@@ -1015,14 +1060,13 @@ unsafe fn create_tray_window(display_name: &str, icon_file: &Path, mutex: HANDLE
     }
 
     if app().unclean_exit_seen.load(Ordering::Relaxed) {
+        let l = lang_for(&app().cfg);
         balloon(
-            &format!(
-                "{display_name} did not shut down cleanly last time. If it misbehaves, right-click > Restart in Safe Mode."
-            ),
+            &tr(l.tip_unclean, &[("{APP}", display_name)]),
             NIIF_WARNING,
         );
     } else {
-        balloon("Running in the tray - right-click for options.", NIIF_INFO);
+        balloon(lang_for(&app().cfg).tip_running, NIIF_INFO);
     }
     hwnd
 }
@@ -1050,16 +1094,14 @@ fn main() {
     let mutex = unsafe { CreateMutexW(null_mut(), 1, mutex_name.as_ptr()) };
     let already_hosted = mutex.is_null() || unsafe { GetLastError() } == ERROR_ALREADY_EXISTS;
     if already_hosted {
+        let l = lang_for(&cfg);
         match daemon::live_url(&cfg, daemon::PROBE_POLL) {
             Some(url) => browser::open_ui(&cfg, &url),
             // Nothing serving yet means the winner is still cold-starting. Opening a browser at a
             // guessed URL would just show connection-refused, so say so instead.
             None => win::message_box(
                 &cfg.display_name,
-                &format!(
-                    "{} is already starting in the tray. Wait a moment, then open it from the tray icon.",
-                    cfg.display_name
-                ),
+                &tr(l.already_starting, &[("{APP}", &cfg.display_name)]),
                 MB_ICONWARNING,
             ),
         }
@@ -1070,11 +1112,15 @@ fn main() {
     let existing = daemon::live_url(&cfg, daemon::PROBE_FAST);
     if let Some(url) = &existing {
         if cfg.on_stray_daemon == StrayPolicy::Warn {
+            let l = lang_for(&cfg);
             win::message_box(
                 &cfg.display_name,
-                &format!(
-                    "{} is already serving at {url}, but the tray icon is not running. Stop that process, then run the shortcut again.",
-                    cfg.display_name
+                &tr(
+                    l.already_serving,
+                    &[
+                        ("{APP}", &cfg.display_name),
+                        ("{URL}", url.as_str()),
+                    ],
                 ),
                 MB_ICONWARNING,
             );
